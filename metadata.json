@@ -1,0 +1,8 @@
+{
+  "name": "Nifty 500 Regime Strategy",
+  "description": "Ideation & strategy cockpit for Nifty 500 market regime allocation, rules, tasks, and screening research.",
+  "permissions": [],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
