@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   Compass,
   ShieldCheck,
@@ -37,6 +37,8 @@ import {
   Activity,
   ExternalLink,
   Play,
+  HelpCircle,
+  PlusCircle,
 } from 'lucide-react';
 import {
   REGIMES_DATA,
@@ -52,12 +54,15 @@ import { SectorTreemap } from './components/SectorTreemap';
 import { PipelineExecutionModal } from './components/PipelineExecutionModal';
 import { SparklineChart } from './components/SparklineChart';
 import { TechnicalChartWorkbench } from './components/TechnicalChartWorkbench';
+import { SparklineGuideModal } from './components/SparklineGuideModal';
+import { SeedFundModal, CapitalConfig } from './components/SeedFundModal';
+import { UserManualView } from './components/UserManualView';
 
 export function App() {
   const appName = import.meta.env.VITE_APP_NAME || 'Invest';
 
-  // Active Navigation View
-  const [activeTab, setActiveTab] = useState<'hierarchy' | 'candidates' | 'paper' | 'backtest' | 'specs'>('hierarchy');
+  // Active Navigation View (hierarchy | candidates | paper | backtest | manual)
+  const [activeTab, setActiveTab] = useState<'hierarchy' | 'candidates' | 'paper' | 'backtest' | 'manual'>('hierarchy');
 
   // Hierarchy drill-down state
   const [selectedSectorId, setSelectedSectorId] = useState<string>('capgoods');
@@ -68,10 +73,64 @@ export function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [inspectedScrip, setInspectedScrip] = useState<StockScrip | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Keyboard shortcut listener for universal search
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.key === 'k' && (e.metaKey || e.ctrlKey)) || (e.key === '/' && document.activeElement?.tagName !== 'INPUT')) {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        setIsSearchOpen(true);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Capital Architecture & Seed Fund Configuration
+  const [capitalConfig, setCapitalConfig] = useState<CapitalConfig>({
+    baseCapital: INITIAL_PAPER_PORTFOLIO.totalInitialCapital,
+    monthlyInflow: INITIAL_PAPER_PORTFOLIO.monthlyDepositAmount,
+    targetLiquidBufferPct: 40,
+    targetStockCount: 5,
+    minPositionSize: 15000,
+  });
+  const [isSeedFundModalOpen, setIsSeedFundModalOpen] = useState(false);
+  const [isSparklineGuideOpen, setIsSparklineGuideOpen] = useState(false);
 
   // Paper Trading State
   const [portfolio, setPortfolio] = useState(INITIAL_PAPER_PORTFOLIO);
   const [tradeSuccessMsg, setTradeSuccessMsg] = useState<string | null>(null);
+
+  const handleSaveCapitalConfig = (newConfig: CapitalConfig) => {
+    setCapitalConfig(newConfig);
+    setTradeSuccessMsg(`Capital configuration updated: ₹${newConfig.baseCapital.toLocaleString('en-IN')} base • ₹${newConfig.monthlyInflow.toLocaleString('en-IN')}/mo inflow`);
+    setTimeout(() => setTradeSuccessMsg(null), 3500);
+  };
+
+  const handleInjectMonthlyInflow = (amount: number) => {
+    setPortfolio((prev) => ({
+      ...prev,
+      liquidBeEsBuffer: prev.liquidBeEsBuffer + amount,
+    }));
+    setTradeSuccessMsg(`Injected +₹${amount.toLocaleString('en-IN')} into Tactical Staging Reserve Pool!`);
+    setTimeout(() => setTradeSuccessMsg(null), 3500);
+  };
+
+  const handleResetPortfolioWithSeed = (seedAmount: number) => {
+    const liquidTarget = Math.round((seedAmount * capitalConfig.targetLiquidBufferPct) / 100);
+    const cashTarget = seedAmount - liquidTarget;
+    setPortfolio({
+      cashBalance: cashTarget,
+      liquidBeEsBuffer: liquidTarget,
+      totalInitialCapital: seedAmount,
+      monthlyDepositAmount: capitalConfig.monthlyInflow,
+      positions: [],
+    });
+    setTradeSuccessMsg(`Reset paper portfolio with fresh ₹${seedAmount.toLocaleString('en-IN')} seed fund!`);
+    setTimeout(() => setTradeSuccessMsg(null), 3500);
+  };
 
   // Markdown copy feedback state
   const [copiedFile, setCopiedFile] = useState<string | null>(null);
@@ -390,36 +449,50 @@ export function App() {
             </div>
           </div>
 
-          {/* Quick Universal Scrip Search Bar */}
-          <div className="relative flex-1 max-w-xs md:mx-4">
+          {/* Quick Universal Scrip Search Bar (Expanded for comfortable desktop/tablet access) */}
+          <div className="relative flex-1 max-w-sm md:max-w-md lg:max-w-xl mx-2 md:mx-4">
             <div className="relative flex items-center">
-              <Search className="absolute left-3 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+              <Search className="absolute left-3 h-4 w-4 text-slate-400 pointer-events-none" />
               <input
+                ref={searchInputRef}
                 type="text"
-                placeholder="Search Scrip (e.g., APAR, DIVIS, ICICI)..."
+                placeholder="Search stocks by symbol or name (e.g., APAR, DIVIS, BEL, ICICI)..."
                 value={searchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value);
                   setIsSearchOpen(true);
                 }}
                 onFocus={() => setIsSearchOpen(true)}
-                className="w-full bg-slate-950/80 border border-slate-700/80 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
+                className="w-full bg-slate-950/90 border border-slate-700/90 hover:border-slate-600 rounded-xl pl-9 pr-16 py-2 text-xs sm:text-sm text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all shadow-inner"
               />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-2.5 text-slate-400 hover:text-slate-200"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              )}
+              <div className="absolute right-2.5 flex items-center gap-1.5">
+                {searchQuery ? (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="text-slate-400 hover:text-slate-200 p-0.5 rounded cursor-pointer"
+                    aria-label="Clear search"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                ) : (
+                  <kbd className="hidden sm:inline-flex items-center text-[10px] text-slate-400 bg-slate-800/80 px-1.5 py-0.5 rounded border border-slate-700/80 pointer-events-none">
+                    Ctrl K
+                  </kbd>
+                )}
+              </div>
             </div>
 
             {/* Quick Search Dropdown Results */}
             {isSearchOpen && searchQuery && (
-              <div className="absolute left-0 right-0 mt-1.5 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl overflow-hidden z-50 max-h-72 overflow-y-auto">
+              <div className="absolute left-0 right-0 mt-1.5 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl overflow-hidden z-50 max-h-80 overflow-y-auto">
+                <div className="p-2 bg-slate-950 border-b border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
+                  <span>Found {searchResults.length} matching scrips</span>
+                  <span className="text-slate-500">Press ESC or click to inspect</span>
+                </div>
                 {searchResults.length === 0 ? (
-                  <div className="p-3 text-xs text-slate-400 text-center">No scrips matching "{searchQuery}"</div>
+                  <div className="p-4 text-xs text-slate-400 text-center">
+                    No scrips matching "{searchQuery}". Try searching by ticker (e.g. APAR) or name (e.g. Tata).
+                  </div>
                 ) : (
                   searchResults.map((scrip) => (
                     <div
@@ -428,24 +501,38 @@ export function App() {
                         setInspectedScrip(scrip);
                         setIsSearchOpen(false);
                       }}
-                      className="p-2.5 border-b border-slate-800/80 hover:bg-slate-800/60 cursor-pointer flex items-center justify-between transition-colors"
+                      className="p-3 border-b border-slate-800/80 hover:bg-slate-800/70 cursor-pointer flex items-center justify-between gap-3 transition-colors"
                     >
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-bold text-xs text-white">{scrip.symbol}</span>
-                          <span className={`text-[10px] px-1.5 py-0.2 rounded font-semibold ${
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-sm text-white">{scrip.symbol}</span>
+                          <span className={`text-[10px] px-2 py-0.5 rounded font-semibold ${
                             scrip.qualificationTier === 'Tier 5 Qualified'
-                              ? 'bg-emerald-500/20 text-emerald-300'
+                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                               : 'bg-slate-800 text-slate-400'
                           }`}>
                             {scrip.qualificationTier}
                           </span>
                         </div>
-                        <div className="text-[11px] text-slate-400 truncate max-w-[180px]">{scrip.name}</div>
+                        <div className="text-xs text-slate-400 truncate mt-0.5">{scrip.name}</div>
                       </div>
-                      <div className="text-right">
-                        <div className="text-xs font-semibold text-white">₹{scrip.price.toLocaleString('en-IN')}</div>
-                        <div className="text-[10px] text-emerald-400 font-mono">Score: {scrip.valMoScore}/100</div>
+
+                      <div className="flex items-center gap-3 shrink-0">
+                        {/* Mini Sparkline in search result */}
+                        <div className="hidden sm:block">
+                          <SparklineChart
+                            data={scrip.sparkline30D}
+                            dma50={scrip.dma50}
+                            currentPrice={scrip.price}
+                            width={72}
+                            height={22}
+                          />
+                        </div>
+
+                        <div className="text-right">
+                          <div className="text-xs font-bold text-white">₹{scrip.price.toLocaleString('en-IN')}</div>
+                          <div className="text-[10px] text-emerald-400 font-mono font-semibold">Score: {scrip.valMoScore}/100</div>
+                        </div>
                       </div>
                     </div>
                   ))
@@ -458,7 +545,7 @@ export function App() {
           <nav className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 self-start md:self-auto text-xs overflow-x-auto max-w-full">
             <button
               onClick={() => setActiveTab('hierarchy')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition-all whitespace-nowrap ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition-all whitespace-nowrap cursor-pointer ${
                 activeTab === 'hierarchy'
                   ? 'bg-emerald-500 text-slate-950 font-semibold shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
@@ -468,7 +555,7 @@ export function App() {
             </button>
             <button
               onClick={() => setActiveTab('candidates')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition-all whitespace-nowrap ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition-all whitespace-nowrap cursor-pointer ${
                 activeTab === 'candidates'
                   ? 'bg-emerald-500 text-slate-950 font-semibold shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
@@ -478,7 +565,7 @@ export function App() {
             </button>
             <button
               onClick={() => setActiveTab('paper')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition-all whitespace-nowrap ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition-all whitespace-nowrap cursor-pointer ${
                 activeTab === 'paper'
                   ? 'bg-emerald-500 text-slate-950 font-semibold shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
@@ -488,7 +575,7 @@ export function App() {
             </button>
             <button
               onClick={() => setActiveTab('backtest')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition-all whitespace-nowrap ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition-all whitespace-nowrap cursor-pointer ${
                 activeTab === 'backtest'
                   ? 'bg-emerald-500 text-slate-950 font-semibold shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
@@ -497,14 +584,14 @@ export function App() {
               <BarChart2 className="h-3.5 w-3.5" /> Backtester
             </button>
             <button
-              onClick={() => setActiveTab('specs')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition-all whitespace-nowrap ${
-                activeTab === 'specs'
+              onClick={() => setActiveTab('manual')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition-all whitespace-nowrap cursor-pointer ${
+                activeTab === 'manual'
                   ? 'bg-emerald-500 text-slate-950 font-semibold shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              <FileText className="h-3.5 w-3.5" /> Strategy Docs
+              <BookOpen className="h-3.5 w-3.5" /> User Manual &amp; Docs
             </button>
           </nav>
 
@@ -564,27 +651,39 @@ export function App() {
                 </div>
 
                 {/* Capital Architecture Metrics */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-950/70 p-3 rounded-xl border border-slate-800/80 text-right">
-                  <div>
-                    <div className="text-[10px] text-slate-400">Base Capital</div>
-                    <div className="text-sm font-black text-emerald-400">₹1,00,000</div>
-                    <div className="text-[9px] text-slate-500">100% Cash CNC</div>
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-950/70 p-3 rounded-xl border border-slate-800/80 text-right">
+                    <div>
+                      <div className="text-[10px] text-slate-400">Base Capital</div>
+                      <div className="text-sm font-black text-emerald-400">₹{capitalConfig.baseCapital.toLocaleString('en-IN')}</div>
+                      <div className="text-[9px] text-slate-500">100% Cash CNC</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-slate-400">Monthly Inflow</div>
+                      <div className="text-sm font-black text-teal-400">+₹{capitalConfig.monthlyInflow.toLocaleString('en-IN')}</div>
+                      <div className="text-[9px] text-slate-500">Staging Pool</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-slate-400">Lot Sizing Floor</div>
+                      <div className="text-sm font-black text-white">₹{(capitalConfig.minPositionSize / 1000).toFixed(0)}k+</div>
+                      <div className="text-[9px] text-slate-500">No &lt;₹10k lots</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-slate-400">Concentration</div>
+                      <div className="text-sm font-black text-cyan-400">{capitalConfig.targetStockCount} Stocks</div>
+                      <div className="text-[9px] text-slate-500">Scale Position Size</div>
+                    </div>
                   </div>
-                  <div>
-                    <div className="text-[10px] text-slate-400">Monthly Inflow</div>
-                    <div className="text-sm font-black text-teal-400">+₹10,000</div>
-                    <div className="text-[9px] text-slate-500">Staging Pool</div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] text-slate-400">Lot Sizing Floor</div>
-                    <div className="text-sm font-black text-white">₹15k – ₹20k</div>
-                    <div className="text-[9px] text-slate-500">No &lt;₹10k lots</div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] text-slate-400">Concentration</div>
-                    <div className="text-sm font-black text-cyan-400">5 to 7 Stocks</div>
-                    <div className="text-[9px] text-slate-500">Scale Position Size</div>
-                  </div>
+
+                  {/* Seed Fund Adjustment Trigger Button */}
+                  <button
+                    onClick={() => setIsSeedFundModalOpen(true)}
+                    className="flex sm:flex-col items-center justify-center gap-1.5 px-3 py-2 sm:py-3 rounded-xl bg-slate-950 border border-emerald-500/40 hover:border-emerald-400 text-emerald-300 hover:bg-emerald-500/10 text-xs font-semibold transition-all cursor-pointer shadow-sm group"
+                    title="Click to adjust base seed capital, monthly SIP, and cash buffers"
+                  >
+                    <Sliders className="h-4 w-4 text-emerald-400 group-hover:scale-110 transition-transform" />
+                    <span className="text-[11px] whitespace-nowrap">Adjust Capital</span>
+                  </button>
                 </div>
               </div>
 
@@ -958,7 +1057,19 @@ export function App() {
                         <th className="py-2.5 px-3">CMP</th>
                         <th className="py-2.5 px-3">P/E vs 5Y Med</th>
                         <th className="py-2.5 px-3">ROCE • D/E • PEG</th>
-                        <th className="py-2.5 px-3">30D vs 50-DMA</th>
+                        <th className="py-2.5 px-3">
+                          <div className="flex items-center gap-1">
+                            <span>30D vs 50-DMA</span>
+                            <button
+                              type="button"
+                              onClick={() => setIsSparklineGuideOpen(true)}
+                              className="text-cyan-400 hover:text-cyan-200 transition-colors p-0.5 rounded cursor-pointer"
+                              title="Click to learn how to read this sparkline chart"
+                            >
+                              <HelpCircle className="h-3 w-3" />
+                            </button>
+                          </div>
+                        </th>
                         <th className="py-2.5 px-3">50-DMA Status</th>
                         <th className="py-2.5 px-3">Val-Mo Score</th>
                         <th className="py-2.5 px-3">Status</th>
@@ -997,6 +1108,7 @@ export function App() {
                               currentPrice={stock.price}
                               width={84}
                               height={26}
+                              onGuideClick={() => setIsSparklineGuideOpen(true)}
                             />
                           </td>
                           <td className="py-3 px-3">
@@ -1085,14 +1197,19 @@ export function App() {
                     Strategic Model Candidates &amp; Calculated Lot Sizing
                   </h2>
                   <p className="text-xs text-slate-400 mt-1">
-                    Systematic lot allocation for ₹1,00,000 base capital (₹15,000–₹20,000 / position) with predefined pyramiding triggers.
+                    Systematic lot allocation for ₹{capitalConfig.baseCapital.toLocaleString('en-IN')} base capital with predefined pyramiding triggers and stop-losses.
                   </p>
                 </div>
 
-                <div className="text-right sm:border-l sm:border-slate-800 sm:pl-6">
+                <div className="text-right sm:border-l sm:border-slate-800 sm:pl-6 flex flex-col items-end gap-1">
                   <div className="text-[10px] text-slate-400">Qualified Candidates</div>
                   <div className="text-2xl font-black text-emerald-400">{qualifiedCandidates.length} Scrips</div>
-                  <div className="text-[10px] text-slate-500">Max 2 per sector rule active</div>
+                  <button
+                    onClick={() => setIsSparklineGuideOpen(true)}
+                    className="text-[11px] text-cyan-400 hover:text-cyan-300 flex items-center gap-1 transition-colors cursor-pointer"
+                  >
+                    <HelpCircle className="h-3 w-3" /> How to read charts
+                  </button>
                 </div>
               </div>
 
@@ -1172,6 +1289,7 @@ export function App() {
                           currentPrice={stock.price}
                           width={76}
                           height={20}
+                          onGuideClick={() => setIsSparklineGuideOpen(true)}
                         />
                       </div>
                       <div className="text-[10px] text-emerald-400 font-mono mt-0.5">RS-3M: +{stock.rsMansfield3M}%</div>
@@ -1304,6 +1422,34 @@ export function App() {
                 </div>
                 <div className="text-emerald-400 font-medium">
                   Total Friction Drag: &lt; 0.25% (Well below 0.5% statutory guardrail)
+                </div>
+              </div>
+
+              {/* Seed Capital & Inflow Controls Bar */}
+              <div className="mt-4 pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2 text-slate-300">
+                  <DollarSign className="h-4 w-4 text-emerald-400" />
+                  <span className="font-semibold">Seed Corpus: ₹{portfolio.totalInitialCapital.toLocaleString('en-IN')}</span>
+                  <span className="text-slate-500">•</span>
+                  <span className="text-teal-400 font-mono">+₹{capitalConfig.monthlyInflow.toLocaleString('en-IN')}/mo Staged Inflow</span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleInjectMonthlyInflow(capitalConfig.monthlyInflow)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-500/15 hover:bg-teal-500/25 border border-teal-500/30 text-teal-300 font-semibold transition-all cursor-pointer"
+                    title="Add one month systematic deposit into staging buffer"
+                  >
+                    <PlusCircle className="h-3.5 w-3.5" />
+                    <span>Inject Monthly SIP (+₹{capitalConfig.monthlyInflow.toLocaleString('en-IN')})</span>
+                  </button>
+                  <button
+                    onClick={() => setIsSeedFundModalOpen(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-700 text-slate-200 font-semibold transition-all cursor-pointer"
+                  >
+                    <Sliders className="h-3.5 w-3.5 text-emerald-400" />
+                    <span>Adjust Seed Capital</span>
+                  </button>
                 </div>
               </div>
             </div>
@@ -1455,146 +1601,18 @@ export function App() {
           </div>
         )}
 
-        {/* ROUTE 5: STRATEGY DOCS & SPECIFICATIONS */}
-        {activeTab === 'specs' && (
-          <div className="space-y-6 animate-fade-in">
-            {/* Free Hosting & Public Publishing Guide */}
-            <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-emerald-950/30 border border-emerald-500/30 rounded-2xl p-6 shadow-xl">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                  <span className="text-emerald-400">🌐</span> Free Hosting &amp; Public Publishing Guide
-                </h3>
-                <span className="text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full">
-                  100% Free
-                </span>
-              </div>
-              <p className="text-xs text-slate-300 mb-4 leading-relaxed">
-                You can share this terminal publicly with zero cost using either the built-in instant URL or automated GitHub Pages.
-              </p>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                {/* Method 1 */}
-                <div className="p-4 bg-slate-950/80 rounded-xl border border-slate-800 space-y-2">
-                  <div className="font-bold text-emerald-400 flex items-center justify-between">
-                    <span>Option 1: Google Cloud Dev & Share URL</span>
-                    <span className="text-[10px] text-slate-400 font-mono">Live</span>
-                  </div>
-                  <p className="text-slate-400 text-[11px]">
-                    Direct instance URL. To share publicly, use the <span className="text-slate-200 font-medium">Share</span> button in Google AI Studio or deploy to GitHub Pages.
-                  </p>
-                  <div className="flex items-center gap-2 pt-1">
-                    <input
-                      type="text"
-                      readOnly
-                      value={liveAppUrl}
-                      className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-[11px] font-mono text-slate-300 focus:outline-none"
-                    />
-                    <button
-                      onClick={() => copyToClipboard('preview-url', liveAppUrl)}
-                      className="px-2.5 py-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg text-xs transition-colors whitespace-nowrap cursor-pointer"
-                    >
-                      {copiedFile === 'preview-url' ? 'Copied!' : 'Copy Link'}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Method 2 */}
-                <div className="p-4 bg-slate-950/80 rounded-xl border border-slate-800 space-y-2">
-                  <div className="font-bold text-cyan-400 flex items-center justify-between">
-                    <span>Option 2: GitHub Pages (2-Click Activation)</span>
-                    <span className="text-[10px] text-slate-400 font-mono">Automated CI/CD</span>
-                  </div>
-                  <p className="text-slate-400 text-[11px]">
-                    Pre-configured via <code className="text-cyan-300 font-mono">.github/workflows/deploy.yml</code>.
-                  </p>
-                  <ol className="text-[11px] text-slate-300 list-decimal list-inside space-y-0.5">
-                    <li>Go to GitHub: <span className="text-white font-mono">SanthoshSkills/invest</span></li>
-                    <li>Click <strong>Settings</strong> ➔ <strong>Pages</strong></li>
-                    <li>Under <strong>Source</strong>, choose <strong>GitHub Actions</strong></li>
-                  </ol>
-                  <div className="text-[10px] text-emerald-400 pt-0.5">
-                    Live URL: <code className="font-mono">https://santhoshskills.github.io/invest/</code>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* STATE.md */}
-            <div className="bg-slate-900/70 border border-slate-800 rounded-2xl p-6 shadow-xl">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-xs font-bold uppercase text-emerald-400 tracking-wider">
-                  STATE.md (Single Source of Truth)
-                </h3>
-                <button
-                  onClick={() => copyToClipboard('state', rawState)}
-                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 transition-colors"
-                >
-                  {copiedFile === 'state' ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
-                  <span>{copiedFile === 'state' ? 'Copied' : 'Copy'}</span>
-                </button>
-              </div>
-              <pre className="p-4 bg-slate-950 rounded-xl text-xs text-slate-300 font-mono overflow-x-auto whitespace-pre-wrap border border-slate-800/80">
-                {rawState}
-              </pre>
-            </div>
-
-            {/* TASKS.md */}
-            <div className="bg-slate-900/70 border border-slate-800 rounded-2xl p-6 shadow-xl">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-xs font-bold uppercase text-blue-400 tracking-wider">
-                  TASKS.md (Execution Log)
-                </h3>
-                <button
-                  onClick={() => copyToClipboard('tasks', rawTasks)}
-                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 transition-colors"
-                >
-                  {copiedFile === 'tasks' ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
-                  <span>{copiedFile === 'tasks' ? 'Copied' : 'Copy'}</span>
-                </button>
-              </div>
-              <pre className="p-4 bg-slate-950 rounded-xl text-xs text-slate-300 font-mono overflow-x-auto whitespace-pre-wrap border border-slate-800/80">
-                {rawTasks}
-              </pre>
-            </div>
-
-            {/* RESEARCH.md */}
-            <div className="bg-slate-900/70 border border-slate-800 rounded-2xl p-6 shadow-xl">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-xs font-bold uppercase text-purple-400 tracking-wider">
-                  RESEARCH.md (Knowledge &amp; Formulas)
-                </h3>
-                <button
-                  onClick={() => copyToClipboard('research', rawResearch)}
-                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 transition-colors"
-                >
-                  {copiedFile === 'research' ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
-                  <span>{copiedFile === 'research' ? 'Copied' : 'Copy'}</span>
-                </button>
-              </div>
-              <pre className="p-4 bg-slate-950 rounded-xl text-xs text-slate-300 font-mono overflow-x-auto whitespace-pre-wrap border border-slate-800/80">
-                {rawResearch}
-              </pre>
-            </div>
-
-            {/* CHECKPOINT.md */}
-            <div className="bg-slate-900/70 border border-slate-800 rounded-2xl p-6 shadow-xl">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-xs font-bold uppercase text-amber-400 tracking-wider">
-                  CHECKPOINT.md (Session State Handoff)
-                </h3>
-                <button
-                  onClick={() => copyToClipboard('checkpoint', rawCheckpoint)}
-                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 transition-colors"
-                >
-                  {copiedFile === 'checkpoint' ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
-                  <span>{copiedFile === 'checkpoint' ? 'Copied' : 'Copy'}</span>
-                </button>
-              </div>
-              <pre className="p-4 bg-slate-950 rounded-xl text-xs text-slate-300 font-mono overflow-x-auto whitespace-pre-wrap border border-slate-800/80">
-                {rawCheckpoint}
-              </pre>
-            </div>
-          </div>
+        {/* ROUTE 5: USER MANUAL, STRATEGY WRITEUPS & QUANTITATIVE SPECS */}
+        {activeTab === 'manual' && (
+          <UserManualView
+            onOpenSparklineGuide={() => setIsSparklineGuideOpen(true)}
+            onOpenSeedFundModal={() => setIsSeedFundModalOpen(true)}
+            rawState={rawState}
+            rawTasks={rawTasks}
+            rawResearch={rawResearch}
+            rawCheckpoint={rawCheckpoint}
+            copiedFile={copiedFile}
+            onCopyFile={copyToClipboard}
+          />
         )}
       </main>
 
@@ -1702,6 +1720,25 @@ export function App() {
         isOpen={isScreeningModalOpen}
         onClose={() => setIsScreeningModalOpen(false)}
         onComplete={handleRunComplete}
+      />
+
+      {/* Sparkline Visual Guide Modal */}
+      <SparklineGuideModal
+        isOpen={isSparklineGuideOpen}
+        onClose={() => setIsSparklineGuideOpen(false)}
+      />
+
+      {/* Seed Fund & Capital Architecture Modal */}
+      <SeedFundModal
+        isOpen={isSeedFundModalOpen}
+        onClose={() => setIsSeedFundModalOpen(false)}
+        config={capitalConfig}
+        onSaveConfig={handleSaveCapitalConfig}
+        onInjectMonthlyInflow={handleInjectMonthlyInflow}
+        onResetPortfolioWithSeed={handleResetPortfolioWithSeed}
+        currentCash={portfolio.cashBalance}
+        currentLiquidBuffer={portfolio.liquidBeEsBuffer}
+        currentEquitiesVal={totalEquitiesValue}
       />
 
       {/* Footer */}

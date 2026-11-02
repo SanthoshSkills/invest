@@ -6,6 +6,8 @@ interface SparklineChartProps {
   currentPrice: number;
   width?: number;
   height?: number;
+  onGuideClick?: () => void;
+  showHelperBadge?: boolean;
 }
 
 export function SparklineChart({
@@ -14,6 +16,8 @@ export function SparklineChart({
   currentPrice,
   width = 86,
   height = 26,
+  onGuideClick,
+  showHelperBadge = false,
 }: SparklineChartProps) {
   // If data is empty, generate an indicative 30-day series ending at currentPrice
   const points = React.useMemo(() => {
@@ -75,8 +79,9 @@ export function SparklineChart({
 
   return (
     <div
-      className="inline-flex items-center gap-1.5 select-none"
-      title={`30D Trend: CMP ₹${currentPrice.toLocaleString('en-IN')} vs 50-DMA ₹${dma50.toLocaleString('en-IN')} (${Number(diffPct) >= 0 ? `+${diffPct}% above` : `${diffPct}% below`})`}
+      onClick={onGuideClick}
+      className={`inline-flex items-center gap-1.5 select-none ${onGuideClick ? 'cursor-pointer hover:opacity-85' : ''}`}
+      title={`30D Trend: CMP ₹${currentPrice.toLocaleString('en-IN')} vs 50-DMA ₹${dma50.toLocaleString('en-IN')} (${Number(diffPct) >= 0 ? `+${diffPct}% above 50-DMA` : `${diffPct}% below 50-DMA`}). Dashed cyan line is 50-DMA. Click to learn how to read.`}
     >
       <svg
         width={width}

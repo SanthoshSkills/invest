@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import * as d3 from 'd3';
 import { MacroSector } from '../types/strategy';
-import { Activity, Info, TrendingUp, TrendingDown } from 'lucide-react';
+import { Activity, Info, TrendingUp, TrendingDown, PieChart } from 'lucide-react';
 
 interface SectorTreemapProps {
   sectors: MacroSector[];
@@ -93,15 +93,15 @@ export function SectorTreemap({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded border border-emerald-400/20">
-              D3.js Visualization
+            <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-emerald-400 bg-emerald-400/10 px-2.5 py-0.5 rounded border border-emerald-400/20">
+              <PieChart className="h-3 w-3" /> Relative Strength Heatmap
             </span>
             <span className="text-xs font-semibold text-slate-300">
-              Nifty 500 Market Cap &amp; Relative Strength Treemap
+              Nifty 500 Market Cap &amp; Momentum Treemap
             </span>
           </div>
           <p className="text-[11px] text-slate-400 mt-0.5">
-            Tile size = Nifty 500 Sector Weight % • Tile color = RRG RS-Momentum (Relative Strength velocity vs Nifty 500)
+            Tile size = Nifty 500 Sector Weight % • Tile color = RRG RS-Momentum velocity • Click any tile to filter hierarchy below
           </p>
         </div>
 
