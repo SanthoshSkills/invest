@@ -17,6 +17,7 @@
 - [x] 2026-10-31: Implemented dynamic 14-period ATR Renko chart engine with noise-filtering metrics, 10-brick EMA overlay, and multi-brick reversal triggers.
 - [x] 2026-10-31: Enhanced Weekly timeframe view with true 10-period EMA overlay, safe corridor shading, +1.5σ valuation trim target, and Wave Riding scaling rules.
 - [x] 2026-11-01: Implemented 4-State Secular Trend indicator (Weekly & Monthly 10-EMA co-alignment) and automated GitHub Pages CI/CD workflow.
+- [x] 2026-11-02: Implemented interactive Audit Cadence & Calibration Tracker (Route 5 / User Manual) with 4 operational review cadences (Daily, Weekly, Monthly, Quarterly), live holding-level invariant checker, and volatility stress simulation.
 
 ## Discarded / Rejected Ideas
 - Permanent static sector blacklists: Rejected because sector headwinds/tailwinds are cyclical.

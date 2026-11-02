@@ -17,6 +17,6 @@
 - Tier 4 (Basic Industry): Supply deficit, capex turnaround, or pricing power moats.
 - Tier 5 (Stock Selection): P/E <= 5-year median + price reclaiming 50-DMA on >1.5x delivery volume.
 
-## 4. Active Status (Late October 2026)
-- Regime: Sideways / Transition.
-- Active Task: Move from conceptual design to screener implementation.
+## 4. Active Status (Early November 2026)
+- Regime: Sideways / Transition (India VIX 15.42 Goldilocks, 60% Equity / 40% Reserve).
+- Operational Audit Cadence: Active in Terminal (Route 5 / Chapter 7 Audit Tracker). Enforcing Daily Stop-Losses, Weekly RRG Sector Rotation, Monthly ₹10k Staging Reserves, and Quarterly Fundamental Audits.

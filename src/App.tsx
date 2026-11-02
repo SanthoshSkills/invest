@@ -1612,6 +1612,7 @@ export function App() {
             rawCheckpoint={rawCheckpoint}
             copiedFile={copiedFile}
             onCopyFile={copyToClipboard}
+            portfolio={portfolio}
           />
         )}
       </main>
