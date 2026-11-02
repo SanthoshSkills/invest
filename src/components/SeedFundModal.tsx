@@ -7,6 +7,7 @@ export interface CapitalConfig {
   targetLiquidBufferPct: number;
   targetStockCount: number;
   minPositionSize: number;
+  maxScripsPerSector: number; // 1, 2, 3, or 0 (0 = Unlimited)
 }
 
 interface SeedFundModalProps {
@@ -36,6 +37,7 @@ export function SeedFundModal({
   const [monthlyInflow, setMonthlyInflow] = useState(config.monthlyInflow);
   const [liquidPct, setLiquidPct] = useState(config.targetLiquidBufferPct);
   const [stockCount, setStockCount] = useState(config.targetStockCount);
+  const [maxPerSector, setMaxPerSector] = useState(config.maxScripsPerSector ?? 2);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
@@ -53,6 +55,7 @@ export function SeedFundModal({
       targetLiquidBufferPct: liquidPct,
       targetStockCount: stockCount,
       minPositionSize: Math.max(10000, Math.round(targetLotSize * 0.75)),
+      maxScripsPerSector: maxPerSector,
     });
     setToastMsg('Capital configuration saved successfully!');
     setTimeout(() => {
@@ -258,13 +261,13 @@ export function SeedFundModal({
             {/* Target Stock Count */}
             <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800">
               <div className="flex items-center justify-between mb-1.5">
-                <label className="text-xs font-bold text-white">Target Concentration</label>
+                <label className="text-xs font-bold text-white">Target Stock Count</label>
                 <span className="text-xs font-bold text-cyan-400 font-mono">{stockCount} Stocks</span>
               </div>
               <input
                 type="range"
                 min={3}
-                max={10}
+                max={15}
                 step={1}
                 value={stockCount}
                 onChange={(e) => setStockCount(Number(e.target.value))}
@@ -273,6 +276,43 @@ export function SeedFundModal({
               <div className="text-[10px] text-slate-400 mt-1 flex justify-between">
                 <span>Model rule: 5 to 7 names</span>
                 <span className="text-cyan-300 font-mono">~₹{targetLotSize.toLocaleString('en-IN')}/lot</span>
+              </div>
+            </div>
+
+            {/* Sector Concentration Cap */}
+            <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800 col-span-1 sm:col-span-2">
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <label className="text-xs font-bold text-white">Sector Concentration Limit</label>
+                  <span className="text-[11px] text-slate-400 block">
+                    Caps maximum scrips selected from any single macro sector during screening.
+                  </span>
+                </div>
+                <span className="text-xs font-bold text-emerald-400 font-mono">
+                  {maxPerSector === 0 ? 'Unlimited' : `Max ${maxPerSector} / Sector`}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {[
+                  { value: 1, label: '1 / Sector', desc: 'Strict Diversification' },
+                  { value: 2, label: '2 / Sector', desc: 'Balanced Momentum' },
+                  { value: 3, label: '3 / Sector', desc: 'Sector Conviction' },
+                  { value: 0, label: 'Unlimited', desc: 'Pure Factor Ranking' },
+                ].map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setMaxPerSector(opt.value)}
+                    className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
+                      maxPerSector === opt.value
+                        ? 'bg-emerald-500/20 border-emerald-500/50 text-white shadow-sm'
+                        : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="text-xs font-bold">{opt.label}</div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">{opt.desc}</div>
+                  </button>
+                ))}
               </div>
             </div>
           </div>

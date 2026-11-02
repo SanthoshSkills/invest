@@ -1,73 +1,70 @@
-# Interactive Audit Cadence & Calibration Tracker
+# Customizable Sector & Overall Scrip Selection Controls
 
-An interactive operational audit console embedded directly into the Knowledge & Strategy Hub under Route 5 (User Manual), providing real-time drift tracking, scheduled cadence countdowns (Daily, Weekly, Monthly, Quarterly), and automated portfolio compliance checks against RESEARCH.md rules.
+A quantitative portfolio diversification control allowing users to configure both the maximum scrip selection limit per sector and the total overall portfolio ceiling. Controls will be accessible directly in the Capital Settings Modal and as live interactive controls in the Candidate Screener view.
 
 ## User Review & Critical Decisions
 
 > [!IMPORTANT]
-> Based on your selections, the Audit & Calibration Tracker will be integrated directly into the **Knowledge & Strategy Hub (Route 5: User Manual)** with an interactive **Audit Schedule and Drift Alert widget**.
->
-> - **Confirmed Placement**: Knowledge & Strategy Hub (Route 5 / User Manual) as an active top-level tab alongside Quickstart, Sparkline, Capital, Val-Mo, Regimes, and Raw Markdown Sync.
-> - **Confirmed Functionality**: Real-time portfolio compliance evaluator, cadence countdown schedules, regime drift warning badges, and interactive "Execute Audit Check" action.
+> In Phase 1, you confirmed the following configuration:
+> - **Control Placement**: Dual-surface access—both inside the **Capital Settings modal** (`SeedFundModal`) and inline within the **Candidate Screener view** (`App.tsx` Route 2).
+> - **Concentration Rule**: Cap scrips per sector with an overall portfolio ceiling, prioritizing top-ranked Val-Mo scores while preventing single-sector clustering (e.g. max 1, 2, or 3 per sector, up to $N$ total scrips).
 
 ---
 
 ## 1. Overview & Core Concept
 
 ### What It Does
-The **Audit Cadence & Calibration Tracker** bridges theoretical strategy rules with live portfolio operations. It explicitly visualizes and validates the four operational review cycles defined in `RESEARCH.md`:
-1. **Daily Market Close**: Trailing 6.5% stop-loss threshold verification and +1.5$\sigma$ valuation ceiling trim monitoring.
-2. **Weekly Close (Weekend Cadence)**: India VIX regime classification (sub-13 Complacent, 13–17 Goldilocks, 17–24 Transition/Caution, >24 Elevated Shock) and Sector Relative Rotation Graph (RRG) quadrant shifts.
-3. **Monthly Inflow Cycle**: Allocation status for the ₹10,000 Tactical Staging Reserve and minimum 10% cash buffer audit.
-4. **Quarterly & Semi-Annual**: Earnings hurdle compliance (ROCE/ROE > 16%, OCF/EBITDA > 70%) and semi-annual NSE index reconstitution dates.
+The feature introduces two interactive concentration parameters to the Value-Momentum screening engine:
+1. **Overall Portfolio Scrip Ceiling ($N_{overall}$)**: Defines the target count of qualified scrips selected for paper trading and capital deployment (default: 5, range: 3 to 15, or All).
+2. **Per-Sector Concentration Cap ($M_{sector}$)**: Limits the maximum number of scrips that can be selected from any single macro sector (e.g. 1 per sector for maximum diversification, 2 for balanced growth, 3, or Unlimited).
+
+When candidates are ranked by their composite Val-Mo score (0–100), the selection engine greedily accepts the highest-scoring stocks while enforcing the sector quota. Once a sector reaches its limit, subsequent scrips from that sector are classified as **"Reserve / Sector Capped"** rather than silently discarded, giving the investor total transparency into opportunity cost.
 
 ### Target Audience & Persona
-Long-term systematic investors adhering to disciplined Value-Momentum principles who require certainty that the live portfolio has not drifted away from the strategy formulas.
-
-### Key Value
-Eliminates ambiguity regarding when and how rules are audited. Instead of relying on manual mental math, users can inspect upcoming audit deadlines, review current drift indicators, and trigger an automated audit that validates all active scrips against quantitative constraints.
+Systematic investors who want to balance high-conviction factor momentum with strict risk diversification, preventing over-exposure to a single outperforming sector (like Power & Capital Goods).
 
 ---
 
 ## 2. User Experience & Visual Design
 
 ### Key User Flows
-1. **Navigating to the Audit Tracker**:
-   - The user opens **Manual / Help** (Route 5) from the navigation bar.
-   - A dedicated tab **"Audit & Drift Tracker"** (with clock/shield indicator) displays current audit health: *Status: Nominal (Zero Rule Breaches)* or *Drift Detected*.
-2. **Inspecting Audit Cadences**:
-   - The user views 4 distinct cadence cards:
-     - **Daily Trigger Monitor**: Monitored stops, valuation ceilings, and high-water mark drawdowns.
-     - **Weekly Regime Matrix**: India VIX reading (15.42 Goldilocks), Sector RRG status (Auto & Power Leading, IT Lagging), 50-DMA breadth.
-     - **Monthly Inflow Staging**: Next inflow deployment date, cash buffer status (12.4% vs 10% floor).
-     - **Quarterly Fundamental Audit**: Next earnings verification window, ROCE/OCF validation date.
-3. **Interactive Audit Execution**:
-   - The user clicks **"Run Portfolio Rule Audit"**.
-   - The system evaluates every holding in the active portfolio against the 6 quantitative constraints in `RESEARCH.md` (Stop Loss, Valuation Ceiling, ROCE Hurdle, OCF/EBITDA, Regime Allocation Cap, Cash Floor).
-   - Instant visual diagnostic table shows pass/warning/fail status with concrete metrics for each scrip.
+1. **Adjusting Limits via Screener Toolbar (Route 2)**:
+   - In Route 2 ("Strategic Model Candidates"), a new **Concentration & Selection Controls** bar appears directly above the candidate cards.
+   - User adjusts:
+     - **Overall Limit**: Interactive stepper or segmented pills (`3 | 5 | 7 | 10 | All`).
+     - **Max / Sector**: Segmented toggle (`1 Max (Strict) | 2 Max (Balanced) | 3 Max | Unlimited`).
+   - The candidate grid immediately updates:
+     - **Primary Selected**: Highlighted with an emerald border and "Primary Model Selection (#1 to #N)" badge.
+     - **Reserve / Capped**: Displayed with subtle amber/slate styling and an explicit tag (e.g. "Sector Cap Reached: 2/2 in Capital Goods").
+2. **Configuring Limits via Capital Settings Modal (`SeedFundModal`)**:
+   - The modal gains a dedicated **Sector & Portfolio Diversification** section.
+   - Two linked sliders:
+     - Target Portfolio Size: 3 to 15 stocks.
+     - Maximum Scrips Per Sector: 1 to 4 or Unlimited.
+   - Instant calculation preview: shows the effective lot size per stock and minimum capital allocation based on the selected count.
+   - Saving persists the configuration across the app (`capitalConfig`).
 
 ### Visual Identity & Theme
-- **Dominant Neutral Canvas**: Deep slate foundation (`bg-slate-950` / `bg-slate-900`) matching terminal aesthetic.
-- **Structural Surfaces**: Subtle 1px borders (`border-slate-800`), dark card surfaces with single-elevation depth.
-- **Accent Tokens**:
-  - Green (`text-emerald-400`, `bg-emerald-500/10`, `border-emerald-500/30`): Fully compliant / nominal state.
-  - Amber (`text-amber-400`, `bg-amber-500/10`, `border-amber-500/30`): Approaching threshold (e.g., drawdown between 5% and 6.5%, cash buffer near 10%).
-  - Crimson (`text-rose-400`, `bg-rose-500/10`, `border-rose-500/30`): Rule breach / action required (stop-loss triggered).
-  - Cyan (`text-cyan-400`): Active inspection tab and cadence timing indicators.
-- **Typography**: Clean sans hierarchy (`Plus Jakarta Sans` / system sans) with strict tabular numerals (`font-mono tabular-nums`) for all percentages, prices, and countdown dates. Zero pills or decorative pulsing dots.
+- **Surfaces**: Consistent dark slate theme (`bg-slate-900/80`, `border-slate-800`), matching the terminal visual language.
+- **Badges & Indicators**:
+  - `Selected (#k)`: Emerald (`bg-emerald-500/10 text-emerald-300 border-emerald-500/30`).
+  - `Sector Capped`: Amber (`bg-amber-500/10 text-amber-300 border-amber-500/30`).
+  - `Above Ceiling`: Slate (`bg-slate-800 text-slate-400 border-slate-700`).
+- **Typography**: Strict tabular numerals (`font-mono tabular-nums`) for counts, quotas, and share lots.
 
 ---
 
 ## 3. Key Product Decisions & Trade-Offs
 
-- **Decision 1: Client-Side Audit Engine vs Backend Polling**
-  - *Chosen Approach*: Dynamic in-browser rule evaluator operating against the loaded portfolio state, benchmark indices, and `RESEARCH.md` parameters.
-  - *Why*: Instant latency, works seamlessly in static builds (e.g. GitHub Pages), and allows immediate "what-if" testing when seed funds or scrip prices are updated.
-- **Decision 2: Placement in Knowledge Hub (Route 5)**
-  - *Chosen Approach*: Embedded as a dedicated section in the Investor Manual rather than cluttering the primary macro or holdings view.
-  - *Why*: Direct alignment with the user's explicit preference while keeping the primary dashboard focused on real-time execution.
-- **Decision 3: Historical Audit Trail in Local Storage**
-  - *Chosen Approach*: Persist the timestamp and outcome of user-initiated audit runs in `localStorage` so the user can verify when the last review occurred across sessions.
+- **Decision 1: Greedy Val-Mo Ranking with Sector Quota**
+  - *Chosen Approach*: Sort Tier-5 qualified candidates by descending Val-Mo score. Admit scrips until $N_{overall}$ is filled or $M_{sector}$ is reached for that sector.
+  - *Why*: Ensures the absolute highest-conviction ideas are picked first while strictly preventing sector concentration risk.
+- **Decision 2: Dual-Surface State Synchronization**
+  - *Chosen Approach*: Store `maxScripsOverall` and `maxScripsPerSector` in `capitalConfig`, shared between `SeedFundModal` and `App.tsx`.
+  - *Why*: Changing the slider on the screener immediately updates capital lot sizing calculations, and vice versa.
+- **Decision 3: Transparent Reserve List Display**
+  - *Chosen Approach*: Do not hide sector-capped scrips; render them in a secondary "Reserve Candidates" section with clear explanation.
+  - *Why*: In systematic trading, knowing which stock is on deck if a leading holding triggers a stop-loss is critical.
 
 ---
 
@@ -76,61 +73,49 @@ Eliminates ambiguity regarding when and how rules are audited. Instead of relyin
 ### Architecture & Component Diagram
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│                    UserManualView (Route 5)                  │
-├──────────────────────────────────────────────────────────────┤
-│ Navigation Tabs: Quickstart | Sparkline | ValMo | Regimes    │
-│                  Specs | [ Audit & Drift Tracker ]  <── NEW  │
-└──────────────────────────────┬───────────────────────────────┘
-                               │
-            ┌──────────────────┴──────────────────┐
-            ▼                                     ▼
-┌───────────────────────────────┐   ┌──────────────────────────────┐
-│     Cadence Schedule Cards    │   │   Live Rule Audit Engine     │
-├───────────────────────────────┤   ├──────────────────────────────┤
-│ • Daily: Stop Loss & Trim     │   │ Evaluates Active Holdings:   │
-│ • Weekly: VIX & RRG Quadrants │   │ 1. Max Drawdown <= 6.5%      │
-│ • Monthly: Inflow & Reserve   │   │ 2. P/E <= Median + 1.5σ      │
-│ • Quarterly: Fundamental ROCE │   │ 3. Cash Buffer >= 10%        │
-│ • Next Review Deadlines       │   │ 4. Regime Max Exposure       │
-└───────────────────────────────┘   └──────────────┬───────────────┘
-                                                   │
-                                    ┌──────────────▼───────────────┐
-                                    │    Audit Diagnostic Table    │
-                                    │  Scrip | Metric | Rule | OK  │
-                                    └──────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────┐
+│                          CapitalConfig State                           │
+│  { baseCapital, monthlyInflow, targetStockCount, maxScripsPerSector }  │
+└───────────────────┬────────────────────────────────┬───────────────────┘
+                    │                                │
+         ┌──────────▼──────────┐          ┌──────────▼──────────┐
+         │    SeedFundModal    │          │  Candidate Screener │
+         │  (Capital Settings) │          │     (Route 2 UI)    │
+         └──────────┬──────────┘          └──────────┬──────────┘
+                    │                                │
+                    └───────────────┬────────────────┘
+                                    │
+                     ┌──────────────▼──────────────┐
+                     │   Sector-Capped Allocator   │
+                     │  1. Sort by Val-Mo Score    │
+                     │  2. Enforce M/sector cap    │
+                     │  3. Enforce N total ceiling │
+                     └──────────────┬──────────────┘
+                                    │
+              ┌─────────────────────┴─────────────────────┐
+              ▼                                           ▼
+┌───────────────────────────┐               ┌───────────────────────────┐
+│ Primary Selected Basket   │               │ Reserve / Capped Scrips   │
+│ (Allocated Lot Shares)    │               │ (Waiting for rotation)    │
+└───────────────────────────┘               └───────────────────────────┘
 ```
 
-### Data Model & State
+### Data Model Updates
 ```typescript
-interface AuditCadenceItem {
-  id: 'daily' | 'weekly' | 'monthly' | 'quarterly';
-  title: string;
-  interval: string;
-  lastChecked: string;
-  nextScheduled: string;
-  triggerRules: string[];
-  status: 'nominal' | 'warning' | 'alert';
-}
-
-interface HoldingAuditResult {
-  symbol: string;
-  companyName: string;
-  pnlPercent: number;
-  maxDrawdownFromPeak: number;
-  peRatio: number;
-  peHistoricalMedian: number;
-  roce3Yr: number;
-  stopLossBreached: boolean;
-  valuationCeilingBreached: boolean;
-  fundamentalHealthy: boolean;
-  actionRequired: string | null;
+export interface CapitalConfig {
+  baseCapital: number;
+  monthlyInflow: number;
+  targetLiquidBufferPct: number;
+  targetStockCount: number;
+  minPositionSize: number;
+  maxScripsPerSector: number; // 1 | 2 | 3 | 0 (0 = Unlimited)
 }
 ```
 
-### Component & State Mapping
-- `AuditTrackerTab`: The tab component inside `UserManualView.tsx`.
-- State hooks:
-  - `lastAuditTimestamp`: Last audit run time, hydrated from `localStorage`.
-  - `activeAuditFilter`: Filter table by 'All', 'Action Required', or 'Compliant'.
-  - `handleRunAudit()`: Re-computes drawdown from high-water mark, compares against trailing stop thresholds, checks current cash ratio against 10%, and updates audit health report.
+### Component State & Handler Mapping
+- `App.tsx`:
+  - `capitalConfig`: Add `maxScripsPerSector: 2` (default 2 per sector, 5 total).
+  - `classifiedCandidates`: Memoized computation returning `{ selectedScrips, cappedScrips, reserveScrips }`.
+  - Inline controls in Route 2: Steppers and segmented buttons modifying `capitalConfig`.
+- `SeedFundModal.tsx`:
+  - New input row for "Sector Concentration Cap" with visual indicators.

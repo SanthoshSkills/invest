@@ -18,6 +18,7 @@
 - [x] 2026-10-31: Enhanced Weekly timeframe view with true 10-period EMA overlay, safe corridor shading, +1.5σ valuation trim target, and Wave Riding scaling rules.
 - [x] 2026-11-01: Implemented 4-State Secular Trend indicator (Weekly & Monthly 10-EMA co-alignment) and automated GitHub Pages CI/CD workflow.
 - [x] 2026-11-02: Implemented interactive Audit Cadence & Calibration Tracker (Route 5 / User Manual) with 4 operational review cadences (Daily, Weekly, Monthly, Quarterly), live holding-level invariant checker, and volatility stress simulation.
+- [x] 2026-11-02: Added customizable scrip selection controls (Overall Portfolio Ceiling: 3 to 15 stocks; Sector Concentration Cap: 1, 2, 3, or Unlimited) integrated across Capital Architecture Settings and the Candidate Screener view.
 
 ## Discarded / Rejected Ideas
 - Permanent static sector blacklists: Rejected because sector headwinds/tailwinds are cyclical.

@@ -95,6 +95,7 @@ export function App() {
     targetLiquidBufferPct: 40,
     targetStockCount: 5,
     minPositionSize: 15000,
+    maxScripsPerSector: 2,
   });
   const [isSeedFundModalOpen, setIsSeedFundModalOpen] = useState(false);
   const [isSparklineGuideOpen, setIsSparklineGuideOpen] = useState(false);
@@ -234,9 +235,80 @@ export function App() {
     });
   }, [minRoce, maxDebtToEquity, maxPeg]);
 
+  // Classify qualified candidates by Val-Mo score with Sector & Overall concentration caps
+  const classifiedCandidates = useMemo(() => {
+    const sorted = [...qualifiedCandidates].sort((a, b) => {
+      if (b.valMoScore !== a.valMoScore) return b.valMoScore - a.valMoScore;
+      return b.roce3Y - a.roce3Y;
+    });
+
+    const targetLotSize = Math.max(
+      capitalConfig.minPositionSize,
+      Math.round(
+        (capitalConfig.baseCapital * (1 - capitalConfig.targetLiquidBufferPct / 100)) /
+          capitalConfig.targetStockCount
+      )
+    );
+
+    const sectorCounts: Record<string, number> = {};
+    let selectedCount = 0;
+
+    return sorted.map((stock, idx) => {
+      const sector = MACRO_SECTORS.find((m) => m.id === stock.sectorId);
+      const sectorName = sector ? sector.name : stock.sectorId;
+      const currentSectorCount = sectorCounts[stock.sectorId] || 0;
+
+      const dynamicShares = Math.max(1, Math.floor(targetLotSize / stock.price));
+      const dynamicAmount = dynamicShares * stock.price;
+
+      if (selectedCount < capitalConfig.targetStockCount) {
+        if (
+          capitalConfig.maxScripsPerSector > 0 &&
+          currentSectorCount >= capitalConfig.maxScripsPerSector
+        ) {
+          return {
+            stock,
+            selectionRank: idx + 1,
+            status: 'sector_capped' as const,
+            sectorName,
+            sectorCountAtSelection: currentSectorCount,
+            dynamicLotShares: dynamicShares,
+            dynamicInvestedAmount: dynamicAmount,
+            reason: `Sector limit reached (${currentSectorCount}/${capitalConfig.maxScripsPerSector} in ${sectorName})`,
+          };
+        } else {
+          sectorCounts[stock.sectorId] = currentSectorCount + 1;
+          selectedCount++;
+          return {
+            stock,
+            selectionRank: idx + 1,
+            status: 'selected' as const,
+            sectorName,
+            sectorCountAtSelection: currentSectorCount + 1,
+            dynamicLotShares: dynamicShares,
+            dynamicInvestedAmount: dynamicAmount,
+            reason: `Primary Model Pick #${selectedCount}`,
+          };
+        }
+      } else {
+        return {
+          stock,
+          selectionRank: idx + 1,
+          status: 'portfolio_capped' as const,
+          sectorName,
+          sectorCountAtSelection: currentSectorCount,
+          dynamicLotShares: dynamicShares,
+          dynamicInvestedAmount: dynamicAmount,
+          reason: `Portfolio ceiling reached (${capitalConfig.targetStockCount} max names)`,
+        };
+      }
+    });
+  }, [qualifiedCandidates, capitalConfig]);
+
   // Execution: Add to Paper Trading Portfolio
-  const executePaperTrade = (stock: StockScrip) => {
-    const requiredCapital = stock.calculatedLotShares * stock.price;
+  const executePaperTrade = (stock: StockScrip, customShares?: number) => {
+    const sharesToBuy = customShares && customShares > 0 ? customShares : stock.calculatedLotShares;
+    const requiredCapital = sharesToBuy * stock.price;
     if (portfolio.cashBalance < requiredCapital) {
       alert(`Insufficient tactical cash (Available: ₹${portfolio.cashBalance.toLocaleString('en-IN')}, Required: ₹${requiredCapital.toLocaleString('en-IN')}).`);
       return;
@@ -249,7 +321,7 @@ export function App() {
       entryDate: new Date().toISOString().split('T')[0],
       entryPrice: stock.price,
       currentPrice: stock.price,
-      shares: stock.calculatedLotShares,
+      shares: sharesToBuy,
       investedAmount: requiredCapital,
       currentValue: requiredCapital,
       pnl: 0,
@@ -1251,8 +1323,125 @@ export function App() {
               </div>
             </div>
 
+            {/* Concentration & Selection Controls Bar */}
+            <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <Sliders className="h-4 w-4 text-emerald-400" />
+                    <span>Portfolio Concentration &amp; Sector Quota Engine</span>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Controls total scrips admitted to the model portfolio and caps single-sector concentration to ensure factor diversification.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setIsSeedFundModalOpen(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-950 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10 text-xs font-semibold transition-all cursor-pointer"
+                  >
+                    <Sliders className="h-3.5 w-3.5 text-emerald-400" />
+                    <span>Adjust Seed Capital (₹{capitalConfig.baseCapital.toLocaleString('en-IN')})</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Interactive Selectors Strip */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t border-slate-800/80 text-xs">
+                {/* 1. Overall Scrip Limit */}
+                <div className="bg-slate-950/60 p-3.5 rounded-xl border border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-white">Overall Portfolio Ceiling</span>
+                    <span className="font-mono font-bold text-cyan-400">
+                      {capitalConfig.targetStockCount} Scrips Max
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    {[3, 5, 7, 10, 15].map((count) => (
+                      <button
+                        key={count}
+                        onClick={() =>
+                          setCapitalConfig((prev) => ({ ...prev, targetStockCount: count }))
+                        }
+                        className={`flex-1 py-1.5 rounded-lg font-bold text-xs transition-all cursor-pointer ${
+                          capitalConfig.targetStockCount === count
+                            ? 'bg-cyan-500 text-slate-950 shadow-md font-black'
+                            : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800'
+                        }`}
+                      >
+                        {count} Names
+                      </button>
+                    ))}
+                  </div>
+                  <div className="text-[10px] text-slate-400 flex justify-between">
+                    <span>Deployable Lot: ~₹{Math.round((capitalConfig.baseCapital * (1 - capitalConfig.targetLiquidBufferPct / 100)) / capitalConfig.targetStockCount).toLocaleString('en-IN')}/lot</span>
+                    <span>Equity Pool: {100 - capitalConfig.targetLiquidBufferPct}%</span>
+                  </div>
+                </div>
+
+                {/* 2. Sector Concentration Limit */}
+                <div className="bg-slate-950/60 p-3.5 rounded-xl border border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-white">Sector Concentration Cap</span>
+                    <span className="font-mono font-bold text-emerald-400">
+                      {capitalConfig.maxScripsPerSector === 0
+                        ? 'Unlimited'
+                        : `Max ${capitalConfig.maxScripsPerSector} / Sector`}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    {[
+                      { val: 1, label: '1 / Sector', desc: 'Strict' },
+                      { val: 2, label: '2 / Sector', desc: 'Balanced' },
+                      { val: 3, label: '3 / Sector', desc: 'Conviction' },
+                      { val: 0, label: 'Unlimited', desc: 'Pure' },
+                    ].map((item) => (
+                      <button
+                        key={item.val}
+                        onClick={() =>
+                          setCapitalConfig((prev) => ({ ...prev, maxScripsPerSector: item.val }))
+                        }
+                        className={`flex-1 py-1.5 rounded-lg font-bold text-xs transition-all cursor-pointer ${
+                          capitalConfig.maxScripsPerSector === item.val
+                            ? 'bg-emerald-500 text-slate-950 shadow-md font-black'
+                            : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800'
+                        }`}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="text-[10px] text-slate-400 flex justify-between">
+                    <span>Prioritizes top Val-Mo ranked stocks</span>
+                    <span>Prevents cluster risk</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Status Breakdown Bar */}
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-2 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-400">Selection Quota:</span>
+                  <span className="px-2.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-semibold font-mono">
+                    {classifiedCandidates.filter((c) => c.status === 'selected').length} of {capitalConfig.targetStockCount} Primary Model Picks
+                  </span>
+                  {classifiedCandidates.filter((c) => c.status === 'sector_capped').length > 0 && (
+                    <span className="px-2.5 py-0.5 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/30 font-semibold font-mono">
+                      {classifiedCandidates.filter((c) => c.status === 'sector_capped').length} Sector Capped (Reserve)
+                    </span>
+                  )}
+                  {classifiedCandidates.filter((c) => c.status === 'portfolio_capped').length > 0 && (
+                    <span className="px-2.5 py-0.5 rounded-md bg-slate-800 text-slate-300 border border-slate-700 font-semibold font-mono">
+                      {classifiedCandidates.filter((c) => c.status === 'portfolio_capped').length} Portfolio Limit (On Deck)
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
             {/* Candidate Cards Grid */}
-            {qualifiedCandidates.length === 0 ? (
+            {classifiedCandidates.length === 0 ? (
               <div className="p-8 text-center text-xs text-slate-400 border border-slate-800 rounded-2xl bg-slate-900/40 space-y-3">
                 <p>No model candidates pass the active filters (ROCE ≥ {minRoce}%, D/E ≤ {maxDebtToEquity}x, PEG ≤ {maxPeg}x).</p>
                 <button
@@ -1264,20 +1453,41 @@ export function App() {
               </div>
             ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {qualifiedCandidates.map((stock) => (
+              {classifiedCandidates.map(({ stock, selectionRank, status, sectorName, dynamicLotShares, dynamicInvestedAmount, reason }) => (
                 <div
                   key={stock.symbol}
-                  className="bg-slate-900/60 border border-slate-800 hover:border-slate-700/80 rounded-2xl p-5 shadow-lg transition-all"
+                  className={`border rounded-2xl p-5 shadow-lg transition-all ${
+                    status === 'selected'
+                      ? 'bg-slate-900/80 border-emerald-500/40 hover:border-emerald-500/60 shadow-emerald-500/5'
+                      : status === 'sector_capped'
+                      ? 'bg-slate-900/50 border-amber-500/30 hover:border-amber-500/50'
+                      : 'bg-slate-950/40 border-slate-800 hover:border-slate-700 opacity-85'
+                  }`}
                 >
                   <div className="flex items-start justify-between gap-3 mb-3">
                     <div>
                       <div className="flex items-center gap-2">
                         <h3 className="text-base font-black text-white">{stock.symbol}</h3>
                         <span className="text-[10px] font-bold bg-emerald-500/15 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/30">
-                          Val-Mo: {stock.valMoScore}/100
+                          Val-Mo: {stock.valMoScore}/100 (Rank #{selectionRank})
                         </span>
+                        {status === 'selected' ? (
+                          <span className="text-[10px] font-black bg-emerald-500 text-slate-950 px-2 py-0.5 rounded">
+                            PRIMARY PICK
+                          </span>
+                        ) : status === 'sector_capped' ? (
+                          <span className="text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded">
+                            SECTOR CAPPED
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-bold bg-slate-800 text-slate-300 px-2 py-0.5 rounded">
+                            RESERVE
+                          </span>
+                        )}
                       </div>
-                      <div className="text-xs text-slate-400">{stock.name}</div>
+                      <div className="text-xs text-slate-400 mt-0.5">
+                        {stock.name} · <span className="text-slate-300 font-medium">{sectorName}</span>
+                      </div>
                     </div>
 
                     <div className="text-right flex flex-col items-end">
@@ -1316,15 +1526,33 @@ export function App() {
                   </div>
 
                   {/* Strategic Lot Sizing Box */}
-                  <div className="p-3.5 rounded-xl bg-gradient-to-r from-emerald-500/10 via-slate-900 to-teal-500/10 border border-emerald-500/20 mb-4">
+                  <div className={`p-3.5 rounded-xl border mb-4 ${
+                    status === 'selected'
+                      ? 'bg-gradient-to-r from-emerald-500/10 via-slate-900 to-teal-500/10 border-emerald-500/20'
+                      : 'bg-slate-950/70 border-slate-800'
+                  }`}>
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-xs font-bold text-white flex items-center gap-1.5">
                         <Target className="h-4 w-4 text-emerald-400" />
-                        Calculated Lot Allocation (₹1L Portfolio):
+                        Dynamic Lot Allocation ({capitalConfig.targetStockCount}-Stock Model):
                       </span>
-                      <span className="text-xs font-black text-emerald-400">
-                        {stock.calculatedLotShares} Shares (₹{(stock.calculatedLotShares * stock.price).toLocaleString('en-IN')})
+                      <span className={`text-xs font-black ${status === 'selected' ? 'text-emerald-400' : 'text-slate-300'}`}>
+                        {dynamicLotShares} Shares (₹{dynamicInvestedAmount.toLocaleString('en-IN')})
                       </span>
+                    </div>
+
+                    {/* Status Note */}
+                    <div className="text-[11px] font-medium py-1 px-2 rounded bg-slate-950/90 border border-slate-800/80 mb-2">
+                      <span className="text-slate-400">Quota Status: </span>
+                      <strong className={
+                        status === 'selected'
+                          ? 'text-emerald-400'
+                          : status === 'sector_capped'
+                          ? 'text-amber-400'
+                          : 'text-slate-300'
+                      }>
+                        {reason}
+                      </strong>
                     </div>
 
                     {/* Pyramiding Triggers */}
@@ -1348,15 +1576,20 @@ export function App() {
                   <div className="flex items-center justify-between gap-3">
                     <button
                       onClick={() => setInspectedScrip(stock)}
-                      className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-medium transition-colors"
+                      className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-medium transition-colors cursor-pointer"
                     >
                       View Deep Metrics
                     </button>
                     <button
-                      onClick={() => executePaperTrade(stock)}
-                      className="flex-1 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors shadow-md"
+                      onClick={() => executePaperTrade(stock, dynamicLotShares)}
+                      className={`flex-1 py-2 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors shadow-md cursor-pointer ${
+                        status === 'selected'
+                          ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950'
+                          : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
+                      }`}
                     >
-                      <Plus className="h-4 w-4" /> Execute Paper Trade
+                      <Plus className="h-4 w-4" />
+                      <span>{status === 'selected' ? 'Execute Paper Trade' : 'Add to Portfolio'}</span>
                     </button>
                   </div>
                 </div>
