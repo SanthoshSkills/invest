@@ -58,6 +58,35 @@ import { SparklineGuideModal } from './components/SparklineGuideModal';
 import { SeedFundModal, CapitalConfig } from './components/SeedFundModal';
 import { UserManualView } from './components/UserManualView';
 
+// Helper to compute weekly Value and Momentum factor contributions for Val-Mo Score
+export function computeValMoWeeklyBreakdown(stock: StockScrip) {
+  // Value subscore components: P/E discount vs 5Y median, PEG ratio, ROCE & Debt-to-Equity
+  const peDiscountBonus = Math.max(0, Math.min(20, Math.round(10 - stock.peStdDevDelta * 7)));
+  const pegBonus = stock.peg <= 1.0 ? 15 : stock.peg <= 1.5 ? 10 : stock.peg <= 1.75 ? 6 : 2;
+  const qualityBonus = Math.min(15, Math.round((stock.roce3Y / 30) * 10 + (stock.debtToEquity < 0.3 ? 5 : stock.debtToEquity < 0.7 ? 2 : 0)));
+  const rawValuePoints = peDiscountBonus + pegBonus + qualityBonus;
+
+  // Momentum subscore components: Mansfield Relative Strength 3M, 50-DMA alignment & slope, Delivery Volume expansion
+  const rsBonus = Math.max(0, Math.min(20, Math.round((stock.rsMansfield3M / 8) * 20)));
+  const dmaBonus = (stock.above50Dma ? 10 : 0) + (stock.dma50Slope === 'Ascending' ? 5 : stock.dma50Slope === 'Flat' ? 2 : 0);
+  const volumeBonus = Math.min(15, Math.round((stock.deliveryVolumeRatio / 2.0) * 15));
+  const rawMomentumPoints = rsBonus + dmaBonus + volumeBonus;
+
+  const rawTotal = rawValuePoints + rawMomentumPoints || 1;
+  const valueScore = Math.round((rawValuePoints / rawTotal) * stock.valMoScore);
+  const momentumScore = Math.max(0, stock.valMoScore - valueScore);
+
+  const valuePct = stock.valMoScore > 0 ? Math.round((valueScore / stock.valMoScore) * 100) : 50;
+  const momentumPct = 100 - valuePct;
+
+  return {
+    valueScore,
+    momentumScore,
+    valuePct,
+    momentumPct,
+  };
+}
+
 export function App() {
   const appName = import.meta.env.VITE_APP_NAME || 'Invest';
 
@@ -182,21 +211,32 @@ export function App() {
   const [minRoce, setMinRoce] = useState<number>(16); // Minimum 3-Year ROCE %
   const [maxDebtToEquity, setMaxDebtToEquity] = useState<number>(0.7); // Maximum Debt to Equity (x)
   const [maxPeg, setMaxPeg] = useState<number>(1.75); // Maximum PEG ratio
+  const [minValMoScore, setMinValMoScore] = useState<number>(0); // Minimum Val-Mo Score (0 to 100)
+  const [statusFilter, setStatusFilter] = useState<'all' | 'Tier 5 Qualified' | 'Watchlist' | 'Disqualified'>('all');
   const [candidateScope, setCandidateScope] = useState<'base_industry' | 'sector' | 'all'>('base_industry');
 
   const resetFiltersToDefault = () => {
     setMinRoce(16);
     setMaxDebtToEquity(0.7);
     setMaxPeg(1.75);
+    setMinValMoScore(0);
+    setStatusFilter('all');
   };
 
   const clearFilters = () => {
     setMinRoce(0);
     setMaxDebtToEquity(2.0);
     setMaxPeg(4.0);
+    setMinValMoScore(0);
+    setStatusFilter('all');
   };
 
-  const isCustomFilterModified = minRoce !== 16 || maxDebtToEquity !== 0.7 || maxPeg !== 1.75;
+  const isCustomFilterModified =
+    minRoce !== 16 ||
+    maxDebtToEquity !== 0.7 ||
+    maxPeg !== 1.75 ||
+    minValMoScore !== 0 ||
+    statusFilter !== 'all';
 
   // Base pool of candidates according to selected scope
   const baseHierarchyPool = useMemo(() => {
@@ -205,15 +245,17 @@ export function App() {
     return STOCK_SCRIPS.filter((s) => s.baseIndustryId === selectedBaseIndustryId);
   }, [candidateScope, selectedSectorId, selectedBaseIndustryId]);
 
-  // Filtered by custom ranges
+  // Filtered by custom ranges & Val-Mo / Status
   const filteredHierarchyStocks = useMemo(() => {
     return baseHierarchyPool.filter((s) => {
       if (s.roce3Y < minRoce) return false;
       if (s.debtToEquity > maxDebtToEquity) return false;
       if (s.peg > maxPeg) return false;
+      if (s.valMoScore < minValMoScore) return false;
+      if (statusFilter !== 'all' && s.qualificationTier !== statusFilter) return false;
       return true;
     });
-  }, [baseHierarchyPool, minRoce, maxDebtToEquity, maxPeg]);
+  }, [baseHierarchyPool, minRoce, maxDebtToEquity, maxPeg, minValMoScore, statusFilter]);
 
   // Global Search Filter
   const searchResults = useMemo(() => {
@@ -231,9 +273,11 @@ export function App() {
       if (s.roce3Y < minRoce) return false;
       if (s.debtToEquity > maxDebtToEquity) return false;
       if (s.peg > maxPeg) return false;
+      if (s.valMoScore < minValMoScore) return false;
+      if (statusFilter !== 'all' && s.qualificationTier !== statusFilter) return false;
       return true;
     });
-  }, [minRoce, maxDebtToEquity, maxPeg]);
+  }, [minRoce, maxDebtToEquity, maxPeg, minValMoScore, statusFilter]);
 
   // Classify qualified candidates by Val-Mo score with Sector & Overall concentration caps
   const classifiedCandidates = useMemo(() => {
@@ -1110,12 +1154,79 @@ export function App() {
                 </div>
               )}
 
+              {/* Val-Mo Score & Status Customization Filter Strip */}
+              <div className="mb-4 p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+                {/* Status Segmented Buttons */}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-slate-400 font-semibold text-[11px] mr-1">Status Filter:</span>
+                  {[
+                    { id: 'all', label: 'All Scrips', count: baseHierarchyPool.length },
+                    { id: 'Tier 5 Qualified', label: 'Tier 5 Qualified', count: baseHierarchyPool.filter((s) => s.qualificationTier === 'Tier 5 Qualified').length },
+                    { id: 'Watchlist', label: 'Watchlist', count: baseHierarchyPool.filter((s) => s.qualificationTier === 'Watchlist').length },
+                    { id: 'Disqualified', label: 'Disqualified', count: baseHierarchyPool.filter((s) => s.qualificationTier === 'Disqualified').length },
+                  ].map((tab) => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setStatusFilter(tab.id as any)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                        statusFilter === tab.id
+                          ? tab.id === 'Tier 5 Qualified'
+                            ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                            : tab.id === 'Watchlist'
+                            ? 'bg-amber-500 text-slate-950 shadow-sm'
+                            : tab.id === 'Disqualified'
+                            ? 'bg-rose-500 text-white shadow-sm'
+                            : 'bg-slate-700 text-white shadow-sm'
+                          : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800'
+                      }`}
+                    >
+                      <span>{tab.label}</span>
+                      <span className="ml-1.5 opacity-75 font-mono text-[10px]">({tab.count})</span>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Val-Mo Score Threshold Controller */}
+                <div className="flex items-center gap-3 bg-slate-900/80 px-3 py-1.5 rounded-xl border border-slate-800">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-slate-400 font-semibold text-[11px]">Min Val-Mo:</span>
+                    <span className="font-mono font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 text-xs">
+                      {minValMoScore > 0 ? `≥ ${minValMoScore}` : 'All (0)'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {[0, 70, 80, 85, 90].map((score) => (
+                      <button
+                        key={score}
+                        onClick={() => setMinValMoScore(score)}
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
+                          minValMoScore === score
+                            ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                            : 'bg-slate-950 border border-slate-800 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        {score === 0 ? 'Off' : `${score}+`}
+                      </button>
+                    ))}
+                  </div>
+                  {/* Factor Legend */}
+                  <div className="hidden lg:flex items-center gap-2 border-l border-slate-800 pl-3 text-[10px] font-mono">
+                    <span className="flex items-center gap-1 text-cyan-400">
+                      <span className="w-2 h-2 rounded-full bg-cyan-400" /> Value %
+                    </span>
+                    <span className="flex items-center gap-1 text-emerald-400">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400" /> Momentum %
+                    </span>
+                  </div>
+                </div>
+              </div>
+
               {filteredHierarchyStocks.length === 0 ? (
                 <div className="p-8 text-center text-xs text-slate-400 border border-slate-800 rounded-xl bg-slate-950/40 space-y-3">
-                  <p>No candidate scrips match the active filters (ROCE ≥ {minRoce}%, D/E ≤ {maxDebtToEquity}x, PEG ≤ {maxPeg}x).</p>
+                  <p>No candidate scrips match the active filters (ROCE ≥ {minRoce}%, D/E ≤ {maxDebtToEquity}x, PEG ≤ {maxPeg}x, Val-Mo ≥ {minValMoScore}).</p>
                   <button
                     onClick={resetFiltersToDefault}
-                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium transition-colors"
+                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium transition-colors cursor-pointer"
                   >
                     Reset to Baseline Filters
                   </button>
@@ -1143,73 +1254,102 @@ export function App() {
                           </div>
                         </th>
                         <th className="py-2.5 px-3">50-DMA Status</th>
-                        <th className="py-2.5 px-3">Val-Mo Score</th>
+                        <th className="py-2.5 px-3">Val-Mo Score (Factor Split)</th>
                         <th className="py-2.5 px-3">Status</th>
                         <th className="py-2.5 px-3">Strategic Lot Size</th>
                         <th className="py-2.5 px-3 text-right">Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/60 font-medium">
-                      {filteredHierarchyStocks.map((stock) => (
-                        <tr key={stock.symbol} className="hover:bg-slate-800/30">
-                          <td className="py-3 px-3">
-                            <div className="font-bold text-white">{stock.symbol}</div>
-                            <div className="text-[10px] text-slate-400 truncate max-w-[140px]">{stock.name}</div>
-                          </td>
-                          <td className="py-3 px-3 text-white font-mono font-semibold">
-                            ₹{stock.price.toLocaleString('en-IN')}
-                          </td>
-                          <td className="py-3 px-3">
-                            <div className="text-white font-mono">{stock.pe}x</div>
-                            <div className="text-[10px] text-slate-400">Med: {stock.peMedian5Y}x ({stock.peStdDevDelta > 0 ? `+${stock.peStdDevDelta}` : stock.peStdDevDelta}σ)</div>
-                          </td>
-                          <td className="py-3 px-3">
-                            <div className="font-mono text-white text-xs">
-                              <span className={stock.roce3Y >= minRoce ? 'text-emerald-400 font-bold' : 'text-slate-400'}>{stock.roce3Y}%</span>
-                              <span className="text-slate-600 mx-1">/</span>
-                              <span className={stock.debtToEquity <= maxDebtToEquity ? 'text-teal-400 font-bold' : 'text-slate-400'}>{stock.debtToEquity}x</span>
-                              <span className="text-slate-600 mx-1">/</span>
-                              <span className={stock.peg <= maxPeg ? 'text-cyan-400 font-bold' : 'text-slate-400'}>{stock.peg}x</span>
-                            </div>
-                            <div className="text-[9px] text-slate-500 mt-0.5">ROCE / D-E / PEG</div>
-                          </td>
-                          <td className="py-3 px-3">
-                            <SparklineChart
-                              data={stock.sparkline30D}
-                              dma50={stock.dma50}
-                              currentPrice={stock.price}
-                              width={84}
-                              height={26}
-                              onGuideClick={() => setIsSparklineGuideOpen(true)}
-                            />
-                          </td>
-                          <td className="py-3 px-3">
-                            <span className={`inline-flex items-center gap-1 text-[11px] font-medium ${
-                              stock.above50Dma ? 'text-emerald-400' : 'text-rose-400'
-                            }`}>
-                              {stock.above50Dma ? 'Reclaimed > 50-DMA' : 'Below 50-DMA'}
-                            </span>
-                            <div className="text-[10px] text-slate-400">Vol: {stock.deliveryVolumeRatio}x deliv.</div>
-                          </td>
-                          <td className="py-3 px-3">
-                            <div className="flex items-center gap-1.5">
-                              <span className="font-bold text-emerald-400">{stock.valMoScore}</span>
-                              <div className="h-1.5 w-12 bg-slate-800 rounded-full overflow-hidden">
-                                <div className="h-full bg-emerald-500" style={{ width: `${stock.valMoScore}%` }} />
+                      {filteredHierarchyStocks.map((stock) => {
+                        const factorBreakdown = computeValMoWeeklyBreakdown(stock);
+                        return (
+                          <tr key={stock.symbol} className="hover:bg-slate-800/30">
+                            <td className="py-3 px-3">
+                              <div className="font-bold text-white">{stock.symbol}</div>
+                              <div className="text-[10px] text-slate-400 truncate max-w-[140px]">{stock.name}</div>
+                            </td>
+                            <td className="py-3 px-3 text-white font-mono font-semibold">
+                              ₹{stock.price.toLocaleString('en-IN')}
+                            </td>
+                            <td className="py-3 px-3">
+                              <div className="text-white font-mono">{stock.pe}x</div>
+                              <div className="text-[10px] text-slate-400">Med: {stock.peMedian5Y}x ({stock.peStdDevDelta > 0 ? `+${stock.peStdDevDelta}` : stock.peStdDevDelta}σ)</div>
+                            </td>
+                            <td className="py-3 px-3">
+                              <div className="font-mono text-white text-xs">
+                                <span className={stock.roce3Y >= minRoce ? 'text-emerald-400 font-bold' : 'text-slate-400'}>{stock.roce3Y}%</span>
+                                <span className="text-slate-600 mx-1">/</span>
+                                <span className={stock.debtToEquity <= maxDebtToEquity ? 'text-teal-400 font-bold' : 'text-slate-400'}>{stock.debtToEquity}x</span>
+                                <span className="text-slate-600 mx-1">/</span>
+                                <span className={stock.peg <= maxPeg ? 'text-cyan-400 font-bold' : 'text-slate-400'}>{stock.peg}x</span>
                               </div>
-                            </div>
-                          </td>
-                          <td className="py-3 px-3">
-                            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
-                              stock.qualificationTier === 'Tier 5 Qualified'
-                                ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20'
-                                : stock.qualificationTier === 'Watchlist'
-                                ? 'bg-amber-500/10 text-amber-300 border-amber-500/20'
-                                : 'bg-rose-500/10 text-rose-300 border-rose-500/20'
-                            }`}>
-                              {stock.qualificationTier}
-                            </span>
-                          </td>
+                              <div className="text-[9px] text-slate-500 mt-0.5">ROCE / D-E / PEG</div>
+                            </td>
+                            <td className="py-3 px-3">
+                              <SparklineChart
+                                data={stock.sparkline30D}
+                                dma50={stock.dma50}
+                                currentPrice={stock.price}
+                                width={84}
+                                height={26}
+                                onGuideClick={() => setIsSparklineGuideOpen(true)}
+                              />
+                            </td>
+                            <td className="py-3 px-3">
+                              <span className={`inline-flex items-center gap-1 text-[11px] font-medium ${
+                                stock.above50Dma ? 'text-emerald-400' : 'text-rose-400'
+                              }`}>
+                                {stock.above50Dma ? 'Reclaimed > 50-DMA' : 'Below 50-DMA'}
+                              </span>
+                              <div className="text-[10px] text-slate-400">Vol: {stock.deliveryVolumeRatio}x deliv.</div>
+                            </td>
+                            <td className="py-3 px-3 min-w-[170px]">
+                              <div className="space-y-1">
+                                <div className="flex items-baseline justify-between">
+                                  <span className="font-black text-emerald-400 font-mono text-xs">
+                                    {stock.valMoScore}
+                                    <span className="text-[9px] text-slate-500 font-normal">/100</span>
+                                  </span>
+                                  <span className="text-[9px] font-mono text-slate-400">
+                                    <span className="text-cyan-400 font-semibold">{factorBreakdown.valuePct}% Val</span>
+                                    <span className="text-slate-600 mx-1">·</span>
+                                    <span className="text-emerald-400 font-semibold">{factorBreakdown.momentumPct}% Mo</span>
+                                  </span>
+                                </div>
+
+                                {/* Inline Dual-Color Split Bar */}
+                                <div
+                                  className="h-2 w-full bg-slate-950 rounded-full overflow-hidden flex border border-slate-800"
+                                  title={`Weekly Factor Split: Value ${factorBreakdown.valueScore} pts (${factorBreakdown.valuePct}%) + Momentum ${factorBreakdown.momentumScore} pts (${factorBreakdown.momentumPct}%) = ${stock.valMoScore} Total`}
+                                >
+                                  <div
+                                    className="h-full bg-cyan-500 transition-all"
+                                    style={{ width: `${factorBreakdown.valuePct}%` }}
+                                  />
+                                  <div
+                                    className="h-full bg-emerald-400 transition-all"
+                                    style={{ width: `${factorBreakdown.momentumPct}%` }}
+                                  />
+                                </div>
+
+                                <div className="flex items-center justify-between text-[8px] font-mono text-slate-500">
+                                  <span className="text-cyan-400/90">{factorBreakdown.valueScore}v pts</span>
+                                  <span className="text-emerald-400/90">{factorBreakdown.momentumScore}m pts</span>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-3 px-3">
+                              <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                                stock.qualificationTier === 'Tier 5 Qualified'
+                                  ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20'
+                                  : stock.qualificationTier === 'Watchlist'
+                                  ? 'bg-amber-500/10 text-amber-300 border-amber-500/20'
+                                  : 'bg-rose-500/10 text-rose-300 border-rose-500/20'
+                              }`}>
+                                {stock.qualificationTier}
+                              </span>
+                            </td>
                           <td className="py-3 px-3">
                             {stock.calculatedLotShares > 0 ? (
                               <div>
@@ -1241,7 +1381,8 @@ export function App() {
                             </div>
                           </td>
                         </tr>
-                      ))}
+                      );
+                    })}
                     </tbody>
                   </table>
                 </div>
@@ -1488,6 +1629,29 @@ export function App() {
                       <div className="text-xs text-slate-400 mt-0.5">
                         {stock.name} · <span className="text-slate-300 font-medium">{sectorName}</span>
                       </div>
+
+                      {/* Weekly Val-Mo Factor Contribution Split Bar */}
+                      {(() => {
+                        const factor = computeValMoWeeklyBreakdown(stock);
+                        return (
+                          <div className="mt-2 p-2 rounded-xl bg-slate-950/70 border border-slate-800/80 max-w-sm">
+                            <div className="flex items-center justify-between text-[10px] font-mono mb-1">
+                              <span className="text-cyan-400 font-semibold">Value: {factor.valuePct}% ({factor.valueScore} pts)</span>
+                              <span className="text-emerald-400 font-semibold">Momentum: {factor.momentumPct}% ({factor.momentumScore} pts)</span>
+                            </div>
+                            <div className="h-1.5 w-full bg-slate-900 rounded-full overflow-hidden flex border border-slate-800">
+                              <div
+                                className="h-full bg-cyan-500 transition-all"
+                                style={{ width: `${factor.valuePct}%` }}
+                              />
+                              <div
+                                className="h-full bg-emerald-400 transition-all"
+                                style={{ width: `${factor.momentumPct}%` }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     <div className="text-right flex flex-col items-end">

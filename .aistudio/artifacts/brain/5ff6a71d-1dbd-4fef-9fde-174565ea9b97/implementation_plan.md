@@ -1,70 +1,59 @@
-# Customizable Sector & Overall Scrip Selection Controls
+# Val-Mo Score & Status Customization with Weekly Factor Contribution
 
-A quantitative portfolio diversification control allowing users to configure both the maximum scrip selection limit per sector and the total overall portfolio ceiling. Controls will be accessible directly in the Capital Settings Modal and as live interactive controls in the Candidate Screener view.
+Interactive filtering controls for minimum Val-Mo score and qualification status, accompanied by inline dual-colored split bars that visualize the exact percentage contribution of Value factors versus Momentum factors at the weekly level.
 
 ## User Review & Critical Decisions
 
 > [!IMPORTANT]
-> In Phase 1, you confirmed the following configuration:
-> - **Control Placement**: Dual-surface access—both inside the **Capital Settings modal** (`SeedFundModal`) and inline within the **Candidate Screener view** (`App.tsx` Route 2).
-> - **Concentration Rule**: Cap scrips per sector with an overall portfolio ceiling, prioritizing top-ranked Val-Mo scores while preventing single-sector clustering (e.g. max 1, 2, or 3 per sector, up to $N$ total scrips).
+> Based on your selections in Phase 1:
+> - **Display Format**: Inline dual-color split bar with percentage labels (e.g., `Val 48% | Mo 52%`) rendered directly within the table's Val-Mo Score cell and candidate cards.
+> - **Filter Controls**: Interactive **Minimum Val-Mo Score slider** plus **Status segmented buttons** (`All | Tier 5 Qualified | Watchlist | Disqualified`) positioned above the scrip table and screener.
 
 ---
 
 ## 1. Overview & Core Concept
 
 ### What It Does
-The feature introduces two interactive concentration parameters to the Value-Momentum screening engine:
-1. **Overall Portfolio Scrip Ceiling ($N_{overall}$)**: Defines the target count of qualified scrips selected for paper trading and capital deployment (default: 5, range: 3 to 15, or All).
-2. **Per-Sector Concentration Cap ($M_{sector}$)**: Limits the maximum number of scrips that can be selected from any single macro sector (e.g. 1 per sector for maximum diversification, 2 for balanced growth, 3, or Unlimited).
+The Value-Momentum (Val-Mo) methodology synthesizes fundamental margin of safety with technical trend confirmation:
+1. **Weekly Value Factor Contribution (%)**:
+   - Historical P/E discount relative to 5-year median ($\sigma$-distance).
+   - PEG ratio quality ($< 1.0\times$ premium bonus).
+   - Balance sheet strength (3-Year ROCE $> 16\%$, low Debt-to-Equity $< 0.5\times$).
+2. **Weekly Momentum Factor Contribution (%)**:
+   - 3-Month Mansfield Relative Strength (RS-3M vs. Nifty 500 benchmark).
+   - Price position relative to ascending 50-DMA and 200-DMA.
+   - Institutional delivery volume expansion ($> 1.5\times$ 30-day baseline).
 
-When candidates are ranked by their composite Val-Mo score (0–100), the selection engine greedily accepts the highest-scoring stocks while enforcing the sector quota. Once a sector reaches its limit, subsequent scrips from that sector are classified as **"Reserve / Sector Capped"** rather than silently discarded, giving the investor total transparency into opportunity cost.
-
-### Target Audience & Persona
-Systematic investors who want to balance high-conviction factor momentum with strict risk diversification, preventing over-exposure to a single outperforming sector (like Power & Capital Goods).
+This feature explicitly computes and renders the percentage weight of Value vs. Momentum for each scrip, allowing users to see at a glance whether a score is value-driven (deep margin of safety) or momentum-driven (relative strength breakout), while giving complete control to filter by score thresholds and qualification tiers.
 
 ---
 
 ## 2. User Experience & Visual Design
 
 ### Key User Flows
-1. **Adjusting Limits via Screener Toolbar (Route 2)**:
-   - In Route 2 ("Strategic Model Candidates"), a new **Concentration & Selection Controls** bar appears directly above the candidate cards.
-   - User adjusts:
-     - **Overall Limit**: Interactive stepper or segmented pills (`3 | 5 | 7 | 10 | All`).
-     - **Max / Sector**: Segmented toggle (`1 Max (Strict) | 2 Max (Balanced) | 3 Max | Unlimited`).
-   - The candidate grid immediately updates:
-     - **Primary Selected**: Highlighted with an emerald border and "Primary Model Selection (#1 to #N)" badge.
-     - **Reserve / Capped**: Displayed with subtle amber/slate styling and an explicit tag (e.g. "Sector Cap Reached: 2/2 in Capital Goods").
-2. **Configuring Limits via Capital Settings Modal (`SeedFundModal`)**:
-   - The modal gains a dedicated **Sector & Portfolio Diversification** section.
-   - Two linked sliders:
-     - Target Portfolio Size: 3 to 15 stocks.
-     - Maximum Scrips Per Sector: 1 to 4 or Unlimited.
-   - Instant calculation preview: shows the effective lot size per stock and minimum capital allocation based on the selected count.
-   - Saving persists the configuration across the app (`capitalConfig`).
-
-### Visual Identity & Theme
-- **Surfaces**: Consistent dark slate theme (`bg-slate-900/80`, `border-slate-800`), matching the terminal visual language.
-- **Badges & Indicators**:
-  - `Selected (#k)`: Emerald (`bg-emerald-500/10 text-emerald-300 border-emerald-500/30`).
-  - `Sector Capped`: Amber (`bg-amber-500/10 text-amber-300 border-amber-500/30`).
-  - `Above Ceiling`: Slate (`bg-slate-800 text-slate-400 border-slate-700`).
-- **Typography**: Strict tabular numerals (`font-mono tabular-nums`) for counts, quotas, and share lots.
+1. **Filtering by Val-Mo Score & Status**:
+   - In Route 1 (Sector Hierarchy table) and Route 2 (Model Candidates), users find:
+     - **Min Val-Mo Score Slider**: Interactive range from 0 to 95 with quick presets (`All (0)`, `Baseline (70)`, `High (80)`, `Elite (90)`).
+     - **Status Segmented Control**: `All Types`, `Tier 5 Qualified`, `Watchlist`, and `Disqualified` buttons with live constituent counts.
+2. **Reading the Weekly Contribution Split Bar**:
+   - In the table's `VAL-MO SCORE` column, the single green bar is replaced with an elegant dual-tone segmented bar:
+     - **Left Segment (Value)**: Cyan/Purple tint (`bg-cyan-500`) with text `Val 48%`.
+     - **Right Segment (Momentum)**: Emerald tint (`bg-emerald-400`) with text `Mo 52%`.
+   - Hovering displays precise point contribution (e.g., `Value: 44.2 pts | Momentum: 47.8 pts | Weekly Factor Split`).
+3. **Status Column Enhancements**:
+   - Status badge displays qualification tier with clear color coding and hover criteria explanation.
 
 ---
 
 ## 3. Key Product Decisions & Trade-Offs
 
-- **Decision 1: Greedy Val-Mo Ranking with Sector Quota**
-  - *Chosen Approach*: Sort Tier-5 qualified candidates by descending Val-Mo score. Admit scrips until $N_{overall}$ is filled or $M_{sector}$ is reached for that sector.
-  - *Why*: Ensures the absolute highest-conviction ideas are picked first while strictly preventing sector concentration risk.
-- **Decision 2: Dual-Surface State Synchronization**
-  - *Chosen Approach*: Store `maxScripsOverall` and `maxScripsPerSector` in `capitalConfig`, shared between `SeedFundModal` and `App.tsx`.
-  - *Why*: Changing the slider on the screener immediately updates capital lot sizing calculations, and vice versa.
-- **Decision 3: Transparent Reserve List Display**
-  - *Chosen Approach*: Do not hide sector-capped scrips; render them in a secondary "Reserve Candidates" section with clear explanation.
-  - *Why*: In systematic trading, knowing which stock is on deck if a leading holding triggers a stop-loss is critical.
+- **Decision 1: Deterministic Weekly Factor Decomposition**
+  - *Chosen Approach*: Derive Value and Momentum sub-scores deterministically from existing quantitative scrip metrics (P/E discount + ROCE + D/E for Value; RS Mansfield + 50-DMA slope + Volume for Momentum).
+  - *Why*: Ensures 100% mathematical fidelity to `RESEARCH.md` without requiring external black-box computations.
+- **Decision 2: Inline Dual-Bar vs Tooltip-Only**
+  - *Chosen Approach*: Render the split bar inline inside the table row so the user can scan factor balance across 20+ scrips simultaneously without clicking or hovering.
+- **Decision 3: Unified Filter State across Hierarchy & Screener**
+  - *Chosen Approach*: Add `minValMoScore` and `statusFilter` to state, making it accessible in the table filter toolbar and persistent across tab navigations.
 
 ---
 
@@ -74,48 +63,43 @@ Systematic investors who want to balance high-conviction factor momentum with st
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│                          CapitalConfig State                           │
-│  { baseCapital, monthlyInflow, targetStockCount, maxScripsPerSector }  │
+│                        Filter & Allocation State                       │
+│  { minValMoScore: 0..95, statusFilter: 'all'|'tier5'|'watchlist' }     │
 └───────────────────┬────────────────────────────────┬───────────────────┘
                     │                                │
          ┌──────────▼──────────┐          ┌──────────▼──────────┐
-         │    SeedFundModal    │          │  Candidate Screener │
-         │  (Capital Settings) │          │     (Route 2 UI)    │
+         │  Route 1: Hierarchy │          │  Route 2: Candidates│
+         │  Scrip Data Table   │          │  Model Pick Cards   │
          └──────────┬──────────┘          └──────────┬──────────┘
                     │                                │
                     └───────────────┬────────────────┘
                                     │
                      ┌──────────────▼──────────────┐
-                     │   Sector-Capped Allocator   │
-                     │  1. Sort by Val-Mo Score    │
-                     │  2. Enforce M/sector cap    │
-                     │  3. Enforce N total ceiling │
+                     │   Weekly Factor Evaluator   │
+                     │  Value Sub-Score (0-50 pts) │
+                     │  Momentum Sub-Score (0-50)  │
+                     │  Split % = Val / Total      │
                      └──────────────┬──────────────┘
                                     │
               ┌─────────────────────┴─────────────────────┐
               ▼                                           ▼
 ┌───────────────────────────┐               ┌───────────────────────────┐
-│ Primary Selected Basket   │               │ Reserve / Capped Scrips   │
-│ (Allocated Lot Shares)    │               │ (Waiting for rotation)    │
+│ Inline Dual Split Bar     │               │ Filtered Result Table     │
+│ [Val: 48%  |  Mo: 52%]    │               │ Matching Scrips & Counts  │
 └───────────────────────────┘               └───────────────────────────┘
 ```
 
-### Data Model Updates
+### Data Model Additions
 ```typescript
-export interface CapitalConfig {
-  baseCapital: number;
-  monthlyInflow: number;
-  targetLiquidBufferPct: number;
-  targetStockCount: number;
-  minPositionSize: number;
-  maxScripsPerSector: number; // 1 | 2 | 3 | 0 (0 = Unlimited)
+export interface ValMoFactorBreakdown {
+  valueScore: number;       // e.g. 44.2
+  momentumScore: number;    // e.g. 47.8
+  valuePct: number;         // e.g. 48%
+  momentumPct: number;      // e.g. 52%
 }
 ```
 
-### Component State & Handler Mapping
-- `App.tsx`:
-  - `capitalConfig`: Add `maxScripsPerSector: 2` (default 2 per sector, 5 total).
-  - `classifiedCandidates`: Memoized computation returning `{ selectedScrips, cappedScrips, reserveScrips }`.
-  - Inline controls in Route 2: Steppers and segmented buttons modifying `capitalConfig`.
-- `SeedFundModal.tsx`:
-  - New input row for "Sector Concentration Cap" with visual indicators.
+### Component State Mapping
+- `minValMoScore`: Number state (default: 0).
+- `statusFilter`: `'all' | 'Tier 5 Qualified' | 'Watchlist' | 'Disqualified'`.
+- `computeValMoBreakdown(stock: StockScrip)`: Utility function generating weekly value vs momentum percentages.
