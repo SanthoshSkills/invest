@@ -49,7 +49,7 @@ import {
   INITIAL_PAPER_PORTFOLIO,
   BACKTEST_SCENARIOS,
 } from './data/nifty500Data';
-import { StockScrip, PaperPosition, RegimeType } from './types/strategy';
+import { StockScrip, PaperPosition, RegimeType, RrgQuadrant } from './types/strategy';
 import { SectorTreemap } from './components/SectorTreemap';
 import { PipelineExecutionModal } from './components/PipelineExecutionModal';
 import { SparklineChart } from './components/SparklineChart';
@@ -57,6 +57,27 @@ import { TechnicalChartWorkbench } from './components/TechnicalChartWorkbench';
 import { SparklineGuideModal } from './components/SparklineGuideModal';
 import { SeedFundModal, CapitalConfig } from './components/SeedFundModal';
 import { UserManualView } from './components/UserManualView';
+import { ApplicationHelperChat } from './components/ApplicationHelperChat';
+
+// Sector short label helper to prevent ambiguous truncations (e.g. Consumer Durables vs FMCG)
+export function getSectorShortLabel(sectorId: string): string {
+  switch (sectorId) {
+    case 'capgoods': return 'Capital Goods';
+    case 'pharma': return 'Healthcare';
+    case 'power': return 'Power & Energy';
+    case 'durables': return 'Cons. Durables';
+    case 'realty': return 'Realty';
+    case 'finance': return 'Financials';
+    case 'it': return 'Information Tech';
+    case 'chemicals': return 'Chemicals';
+    case 'auto': return 'Automobile';
+    case 'metals': return 'Metals';
+    case 'fmcg': return 'FMCG';
+    case 'telecom': return 'Telecom';
+    case 'cement': return 'Cement';
+    default: return sectorId;
+  }
+}
 
 // Helper to compute weekly Value and Momentum factor contributions for Val-Mo Score
 export function computeValMoWeeklyBreakdown(stock: StockScrip) {
@@ -87,14 +108,37 @@ export function computeValMoWeeklyBreakdown(stock: StockScrip) {
   };
 }
 
+export type ValMoScoreRangeBucket = 'all' | '70-79.9' | '80-84.9' | '85-89.9' | '90-100';
+
+export interface ValMoRangeConfig {
+  id: ValMoScoreRangeBucket;
+  label: string;
+  badge: string;
+  min: number;
+  max: number;
+}
+
+export const VAL_MO_SCORE_RANGES: ValMoRangeConfig[] = [
+  { id: 'all', label: 'Off', badge: 'All (0–100)', min: 0, max: 100 },
+  { id: '70-79.9', label: '70–79.9', badge: '70 – 79.9', min: 70, max: 79.99 },
+  { id: '80-84.9', label: '80–84.9', badge: '80 – 84.9', min: 80, max: 84.99 },
+  { id: '85-89.9', label: '85–89.9', badge: '85 – 89.9', min: 85, max: 89.99 },
+  { id: '90-100', label: '90–100', badge: '90 – 100', min: 90, max: 100 },
+];
+
 export function App() {
   const appName = import.meta.env.VITE_APP_NAME || 'Invest';
+
+  // Active Market Regime
+  const activeRegime = REGIMES_DATA.find((r) => r.status === 'active') || REGIMES_DATA[0];
 
   // Active Navigation View (hierarchy | candidates | paper | backtest | manual)
   const [activeTab, setActiveTab] = useState<'hierarchy' | 'candidates' | 'paper' | 'backtest' | 'manual'>('hierarchy');
 
-  // Hierarchy drill-down state
+  // Hierarchy drill-down state & multi-sector selection
   const [selectedSectorId, setSelectedSectorId] = useState<string>('capgoods');
+  const [selectedSectorIds, setSelectedSectorIds] = useState<string[]>(['capgoods']);
+  const [selectedQuadrants, setSelectedQuadrants] = useState<RrgQuadrant[]>([]);
   const [selectedIndustryId, setSelectedIndustryId] = useState<string>('power_td');
   const [selectedBaseIndustryId, setSelectedBaseIndustryId] = useState<string>('transformers');
 
@@ -247,27 +291,155 @@ export function App() {
   };
 
   // Filtered stocks for the hierarchy drill-down
-  const activeSector = useMemo(
-    () => MACRO_SECTORS.find((s) => s.id === selectedSectorId) || MACRO_SECTORS[0],
-    [selectedSectorId]
-  );
-  const activeIndustry = useMemo(
-    () => INDUSTRY_GROUPS.find((i) => i.id === selectedIndustryId) || INDUSTRY_GROUPS[0],
-    [selectedIndustryId]
-  );
-  const activeBaseIndustry = useMemo(
-    () => BASE_INDUSTRIES.find((b) => b.id === selectedBaseIndustryId) || BASE_INDUSTRIES[0],
-    [selectedBaseIndustryId]
-  );
+  const activeSector = useMemo(() => {
+    if (selectedSectorIds.length > 0) {
+      if (selectedSectorIds.includes(selectedSectorId)) {
+        return MACRO_SECTORS.find((s) => s.id === selectedSectorId) || MACRO_SECTORS[0];
+      }
+      return MACRO_SECTORS.find((s) => s.id === selectedSectorIds[0]) || MACRO_SECTORS[0];
+    }
+    return MACRO_SECTORS.find((s) => s.id === selectedSectorId) || MACRO_SECTORS[0];
+  }, [selectedSectorIds, selectedSectorId]);
+
+  const activeIndustry = useMemo(() => {
+    const list = INDUSTRY_GROUPS.filter((i) => i.sectorId === activeSector.id);
+    const found = list.find((i) => i.id === selectedIndustryId);
+    return found || list[0] || INDUSTRY_GROUPS[0];
+  }, [activeSector, selectedIndustryId]);
+
+  const activeBaseIndustry = useMemo(() => {
+    const list = BASE_INDUSTRIES.filter((b) => b.industryId === activeIndustry.id);
+    const found = list.find((b) => b.id === selectedBaseIndustryId);
+    return found || list[0] || BASE_INDUSTRIES[0];
+  }, [activeIndustry, selectedBaseIndustryId]);
 
   const handleSelectSector = (sectorId: string) => {
     setSelectedSectorId(sectorId);
+    setSelectedSectorIds([sectorId]);
+    setSelectedQuadrants([]);
     const matchInd = INDUSTRY_GROUPS.find((i) => i.sectorId === sectorId);
     if (matchInd) {
       setSelectedIndustryId(matchInd.id);
       const matchBase = BASE_INDUSTRIES.find((b) => b.industryId === matchInd.id);
       if (matchBase) setSelectedBaseIndustryId(matchBase.id);
     }
+    setCandidateScope('sector');
+  };
+
+  // Multi-sector toggle from Treemap or Macro Sector list
+  const handleToggleSector = (sectorId: string) => {
+    // REQUIREMENT: "if there is only one sector selected in the treemap, clicking on it again should result in all being selected in the treemap and the table"
+    if (selectedSectorIds.length === 1 && selectedSectorIds[0] === sectorId) {
+      const allSectorIds = MACRO_SECTORS.map((s) => s.id);
+      setSelectedSectorIds(allSectorIds);
+      setSelectedQuadrants(['Leading', 'Improving', 'Weakening', 'Lagging']);
+      setSelectedSectorId(sectorId);
+      setCandidateScope('sector');
+      return;
+    }
+
+    // If currently all sectors are selected, clicking a single sector isolates that sector
+    if (selectedSectorIds.length === MACRO_SECTORS.length) {
+      setSelectedSectorIds([sectorId]);
+      setSelectedQuadrants([]);
+      setSelectedSectorId(sectorId);
+      const matchInd = INDUSTRY_GROUPS.find((i) => i.sectorId === sectorId);
+      if (matchInd) {
+        setSelectedIndustryId(matchInd.id);
+        const matchBase = BASE_INDUSTRIES.find((b) => b.industryId === matchInd.id);
+        if (matchBase) setSelectedBaseIndustryId(matchBase.id);
+      }
+      setCandidateScope('sector');
+      return;
+    }
+
+    let next: string[];
+    if (selectedSectorIds.includes(sectorId)) {
+      next = selectedSectorIds.filter((id) => id !== sectorId);
+      if (next.length === 0) {
+        // If deselecting leaves 0, select all sectors
+        next = MACRO_SECTORS.map((s) => s.id);
+        setSelectedQuadrants(['Leading', 'Improving', 'Weakening', 'Lagging']);
+      } else {
+        setSelectedQuadrants([]);
+      }
+    } else {
+      next = [...selectedSectorIds, sectorId];
+      if (next.length === MACRO_SECTORS.length) {
+        setSelectedQuadrants(['Leading', 'Improving', 'Weakening', 'Lagging']);
+      } else {
+        setSelectedQuadrants([]);
+      }
+    }
+
+    setSelectedSectorIds(next);
+
+    // Sync active drilldown focus sector to a sector that is in next
+    const targetFocusSectorId = next.includes(sectorId) ? sectorId : next[0] || 'capgoods';
+    setSelectedSectorId(targetFocusSectorId);
+
+    const matchInd = INDUSTRY_GROUPS.find((i) => i.sectorId === targetFocusSectorId);
+    if (matchInd) {
+      setSelectedIndustryId(matchInd.id);
+      const matchBase = BASE_INDUSTRIES.find((b) => b.industryId === matchInd.id);
+      if (matchBase) setSelectedBaseIndustryId(matchBase.id);
+    }
+
+    setCandidateScope('sector');
+  };
+
+  const handleSelectOnlySector = (sectorId: string) => {
+    setSelectedSectorIds([sectorId]);
+    setSelectedSectorId(sectorId);
+    setSelectedQuadrants([]);
+    const matchInd = INDUSTRY_GROUPS.find((i) => i.sectorId === sectorId);
+    if (matchInd) {
+      setSelectedIndustryId(matchInd.id);
+      const matchBase = BASE_INDUSTRIES.find((b) => b.industryId === matchInd.id);
+      if (matchBase) setSelectedBaseIndustryId(matchBase.id);
+    }
+    setCandidateScope('sector');
+  };
+
+  const handleSelectAllSectors = () => {
+    setSelectedSectorIds(MACRO_SECTORS.map((s) => s.id));
+    setSelectedQuadrants(['Leading', 'Improving', 'Weakening', 'Lagging']);
+    setCandidateScope('sector');
+  };
+
+  const handleClearSectors = () => {
+    setSelectedSectorIds(['capgoods']);
+    setSelectedSectorId('capgoods');
+    setSelectedQuadrants([]);
+    setCandidateScope('sector');
+  };
+
+  const handleToggleQuadrant = (quadrant: RrgQuadrant) => {
+    const isAlreadyActive = selectedQuadrants.includes(quadrant);
+    let nextQuadrants: RrgQuadrant[];
+    if (isAlreadyActive) {
+      nextQuadrants = selectedQuadrants.filter((q) => q !== quadrant);
+    } else {
+      nextQuadrants = [...selectedQuadrants, quadrant];
+    }
+    setSelectedQuadrants(nextQuadrants);
+
+    if (nextQuadrants.length === 0) {
+      setSelectedSectorIds(['capgoods']);
+    } else {
+      const sectorsInQuadrants = MACRO_SECTORS.filter((s) => nextQuadrants.includes(s.quadrant)).map((s) => s.id);
+      setSelectedSectorIds(sectorsInQuadrants);
+      if (sectorsInQuadrants.length > 0 && !sectorsInQuadrants.includes(selectedSectorId)) {
+        setSelectedSectorId(sectorsInQuadrants[0]);
+        const matchInd = INDUSTRY_GROUPS.find((i) => i.sectorId === sectorsInQuadrants[0]);
+        if (matchInd) {
+          setSelectedIndustryId(matchInd.id);
+          const matchBase = BASE_INDUSTRIES.find((b) => b.industryId === matchInd.id);
+          if (matchBase) setSelectedBaseIndustryId(matchBase.id);
+        }
+      }
+    }
+    setCandidateScope('sector');
   };
 
   // Advanced Custom Metric Filters
@@ -275,7 +447,7 @@ export function App() {
   const [minRoce, setMinRoce] = useState<number>(16); // Minimum 3-Year ROCE %
   const [maxDebtToEquity, setMaxDebtToEquity] = useState<number>(0.7); // Maximum Debt to Equity (x)
   const [maxPeg, setMaxPeg] = useState<number>(1.75); // Maximum PEG ratio
-  const [minValMoScore, setMinValMoScore] = useState<number>(0); // Minimum Val-Mo Score (0 to 100)
+  const [valMoRange, setValMoRange] = useState<ValMoScoreRangeBucket>('all'); // Val-Mo Score Bucket Filter
   const [statusFilter, setStatusFilter] = useState<'all' | 'Tier 5 Qualified' | 'Watchlist' | 'Disqualified'>('all');
   const [candidateScope, setCandidateScope] = useState<'base_industry' | 'sector' | 'all'>('base_industry');
 
@@ -283,7 +455,7 @@ export function App() {
     setMinRoce(16);
     setMaxDebtToEquity(0.7);
     setMaxPeg(1.75);
-    setMinValMoScore(0);
+    setValMoRange('all');
     setStatusFilter('all');
   };
 
@@ -291,7 +463,7 @@ export function App() {
     setMinRoce(0);
     setMaxDebtToEquity(2.0);
     setMaxPeg(4.0);
-    setMinValMoScore(0);
+    setValMoRange('all');
     setStatusFilter('all');
   };
 
@@ -299,27 +471,53 @@ export function App() {
     minRoce !== 16 ||
     maxDebtToEquity !== 0.7 ||
     maxPeg !== 1.75 ||
-    minValMoScore !== 0 ||
+    valMoRange !== 'all' ||
     statusFilter !== 'all';
 
-  // Base pool of candidates according to selected scope
+  // Base pool of candidates according to selected scope (multi-sector & quadrant aware)
   const baseHierarchyPool = useMemo(() => {
     if (candidateScope === 'all') return stockScrips;
-    if (candidateScope === 'sector') return stockScrips.filter((s) => s.sectorId === selectedSectorId);
+    if (candidateScope === 'sector') {
+      if (selectedSectorIds.length === 0) return stockScrips;
+      return stockScrips.filter((s) => {
+        if (!selectedSectorIds.includes(s.sectorId)) return false;
+        // Strict quadrant enforcement: when quadrants are selected, exclude any scrip whose sector quadrant does not match
+        if (selectedQuadrants.length > 0) {
+          const sec = MACRO_SECTORS.find((m) => m.id === s.sectorId);
+          if (!sec || !selectedQuadrants.includes(sec.quadrant)) return false;
+        }
+        return true;
+      });
+    }
     return stockScrips.filter((s) => s.baseIndustryId === selectedBaseIndustryId);
-  }, [candidateScope, selectedSectorId, selectedBaseIndustryId, stockScrips]);
+  }, [candidateScope, selectedSectorIds, selectedQuadrants, selectedBaseIndustryId, stockScrips]);
+
+  // Sector display list pinned by active selected quadrants
+  const displayedMacroSectors = useMemo(() => {
+    if (selectedQuadrants.length === 0) return MACRO_SECTORS;
+    return [...MACRO_SECTORS].sort((a, b) => {
+      const aMatch = selectedQuadrants.includes(a.quadrant);
+      const bMatch = selectedQuadrants.includes(b.quadrant);
+      if (aMatch && !bMatch) return -1;
+      if (!aMatch && bMatch) return 1;
+      return b.weightPct - a.weightPct;
+    });
+  }, [selectedQuadrants]);
 
   // Filtered by custom ranges & Val-Mo / Status
   const filteredHierarchyStocks = useMemo(() => {
+    const rangeConfig = VAL_MO_SCORE_RANGES.find((r) => r.id === valMoRange);
     return baseHierarchyPool.filter((s) => {
       if (s.roce3Y < minRoce) return false;
       if (s.debtToEquity > maxDebtToEquity) return false;
       if (s.peg > maxPeg) return false;
-      if (s.valMoScore < minValMoScore) return false;
+      if (rangeConfig && valMoRange !== 'all') {
+        if (s.valMoScore < rangeConfig.min || s.valMoScore > rangeConfig.max) return false;
+      }
       if (statusFilter !== 'all' && s.qualificationTier !== statusFilter) return false;
       return true;
     });
-  }, [baseHierarchyPool, minRoce, maxDebtToEquity, maxPeg, minValMoScore, statusFilter]);
+  }, [baseHierarchyPool, minRoce, maxDebtToEquity, maxPeg, valMoRange, statusFilter]);
 
   // Global Search Filter
   const searchResults = useMemo(() => {
@@ -332,16 +530,19 @@ export function App() {
 
   // Model Qualified Candidates (Tier 5) with custom filters
   const qualifiedCandidates = useMemo(() => {
+    const rangeConfig = VAL_MO_SCORE_RANGES.find((r) => r.id === valMoRange);
     return stockScrips.filter((s) => {
       if (s.qualificationTier !== 'Tier 5 Qualified') return false;
       if (s.roce3Y < minRoce) return false;
       if (s.debtToEquity > maxDebtToEquity) return false;
       if (s.peg > maxPeg) return false;
-      if (s.valMoScore < minValMoScore) return false;
+      if (rangeConfig && valMoRange !== 'all') {
+        if (s.valMoScore < rangeConfig.min || s.valMoScore > rangeConfig.max) return false;
+      }
       if (statusFilter !== 'all' && s.qualificationTier !== statusFilter) return false;
       return true;
     });
-  }, [stockScrips, minRoce, maxDebtToEquity, maxPeg, minValMoScore, statusFilter]);
+  }, [stockScrips, minRoce, maxDebtToEquity, maxPeg, valMoRange, statusFilter]);
 
   // Classify qualified candidates by Val-Mo score with Sector & Overall concentration caps
   const classifiedCandidates = useMemo(() => {
@@ -888,59 +1089,146 @@ export function App() {
               </div>
             </div>
 
-            {/* D3-based Nifty 500 Sector Treemap Visualization */}
+            {/* D3-based Nifty 500 Sector Treemap Visualization with Multi-Sector & Quadrant Filter */}
             <SectorTreemap
               sectors={MACRO_SECTORS}
-              selectedSectorId={selectedSectorId}
-              onSelectSector={handleSelectSector}
+              selectedSectorIds={selectedSectorIds}
+              activeFocusSectorId={selectedSectorId}
+              onToggleSector={handleToggleSector}
+              onSelectOnlySector={handleSelectOnlySector}
+              onSelectAllSectors={handleSelectAllSectors}
+              onClearSectors={handleClearSectors}
+              selectedQuadrants={selectedQuadrants}
+              onToggleQuadrant={handleToggleQuadrant}
             />
 
             {/* Level 2 & Level 3 & Level 4: Drill-Down Funnel Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Level 2: Macro Sector (RRG Quadrant Selection) */}
+              {/* Level 2: Macro Sector (RRG Quadrant Selection & Multi-Select) */}
               <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 shadow-lg flex flex-col">
-                <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
                     <span className="w-5 h-5 rounded-md bg-amber-500/20 text-amber-400 font-bold text-xs flex items-center justify-center">1</span>
                     <h3 className="text-xs font-bold uppercase tracking-wider text-slate-200">
                       Macro Sector (RRG)
                     </h3>
                   </div>
-                  <span className="text-[10px] text-slate-400">Filter: Leading &amp; Improving</span>
+                  <span className="text-[10px] text-emerald-400 font-semibold font-mono">
+                    {selectedSectorIds.length} of {MACRO_SECTORS.length} Selected
+                  </span>
                 </div>
 
-                <div className="space-y-2 flex-1 overflow-y-auto max-h-[380px] pr-1">
-                  {MACRO_SECTORS.map((sector) => (
-                    <div
-                      key={sector.id}
-                      onClick={() => handleSelectSector(sector.id)}
-                      className={`p-3 rounded-xl border transition-all cursor-pointer ${
-                        selectedSectorId === sector.id
-                          ? 'bg-emerald-500/15 border-emerald-500/40 text-white shadow-sm'
-                          : 'bg-slate-950/60 border-slate-800 hover:border-slate-700 text-slate-300'
-                      }`}
+                {/* Quadrant Quick Filter Pills in Table Header */}
+                <div className="mb-2.5 pb-2 border-b border-slate-800/80 flex flex-wrap items-center gap-1">
+                  {(['Leading', 'Improving', 'Weakening', 'Lagging'] as RrgQuadrant[]).map((quad) => {
+                    const isActive = selectedQuadrants.includes(quad);
+                    const quadColors = {
+                      Leading: 'bg-emerald-500 text-slate-950 border-emerald-400 font-bold shadow-sm',
+                      Improving: 'bg-cyan-500 text-slate-950 border-cyan-400 font-bold shadow-sm',
+                      Weakening: 'bg-amber-500 text-slate-950 border-amber-400 font-bold shadow-sm',
+                      Lagging: 'bg-rose-500 text-white border-rose-400 font-bold shadow-sm',
+                    };
+                    const count = MACRO_SECTORS.filter((s) => s.quadrant === quad).length;
+                    return (
+                      <button
+                        key={quad}
+                        onClick={() => handleToggleQuadrant(quad)}
+                        className={`text-[10px] px-2 py-0.5 rounded-md border transition-all cursor-pointer ${
+                          isActive
+                            ? quadColors[quad]
+                            : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white hover:border-slate-700'
+                        }`}
+                        title={`Filter scrips by ${quad} quadrant (${count} sectors)`}
+                      >
+                        {quad} ({count})
+                      </button>
+                    );
+                  })}
+                  <div className="ml-auto flex items-center gap-1">
+                    <button
+                      onClick={handleSelectAllSectors}
+                      className="text-[10px] px-1.5 py-0.5 rounded bg-slate-950 text-slate-300 hover:text-white border border-slate-800 cursor-pointer"
+                      title="Select all 13 sectors"
                     >
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="font-bold text-xs">{sector.name}</span>
-                        <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold ${
-                          sector.quadrant === 'Leading'
-                            ? 'bg-emerald-500/20 text-emerald-300'
-                            : sector.quadrant === 'Improving'
-                            ? 'bg-cyan-500/20 text-cyan-300'
-                            : 'bg-rose-500/20 text-rose-300'
-                        }`}>
-                          {sector.quadrant}
-                        </span>
+                      All
+                    </button>
+                    <button
+                      onClick={handleClearSectors}
+                      className="text-[10px] px-1.5 py-0.5 rounded bg-slate-950 text-slate-400 hover:text-rose-400 border border-slate-800 cursor-pointer"
+                      title="Reset selection"
+                    >
+                      Reset
+                    </button>
+                  </div>
+                </div>
+
+                {/* Active Quadrant Filtering Alert Banner */}
+                {selectedQuadrants.length > 0 && (
+                  <div className="mb-2 px-2.5 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/25 text-[10px] text-emerald-300 flex items-center justify-between">
+                    <span className="font-semibold">
+                      Filtered: {selectedQuadrants.join(', ')} ({selectedSectorIds.length} sectors)
+                    </span>
+                    <span className="text-[9px] text-slate-400 font-mono">Matching sectors pinned to top</span>
+                  </div>
+                )}
+
+                <div className="space-y-2 flex-1 overflow-y-auto max-h-[380px] pr-1">
+                  {displayedMacroSectors.map((sector) => {
+                    const isSelected = selectedSectorIds.includes(sector.id);
+                    const count = stockScrips.filter((s) => s.sectorId === sector.id).length;
+                    return (
+                      <div
+                        key={sector.id}
+                        onClick={() => handleToggleSector(sector.id)}
+                        className={`p-2.5 rounded-xl border transition-all cursor-pointer relative group ${
+                          isSelected
+                            ? 'bg-emerald-500/15 border-emerald-500/50 text-white shadow-sm'
+                            : 'bg-slate-950/60 border-slate-800 hover:border-slate-700 text-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-2">
+                            <span className={`w-3.5 h-3.5 rounded flex items-center justify-center text-[9px] font-bold border transition-colors ${
+                              isSelected
+                                ? 'bg-emerald-500 border-emerald-400 text-slate-950'
+                                : 'bg-slate-900 border-slate-700 text-transparent'
+                            }`}>
+                              ✓
+                            </span>
+                            <span className="font-bold text-xs">{sector.name}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSelectOnlySector(sector.id);
+                              }}
+                              className="opacity-0 group-hover:opacity-100 text-[9px] px-1.5 py-0.2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded border border-slate-700 transition-opacity cursor-pointer"
+                              title={`Isolate ${sector.name} only`}
+                            >
+                              Only
+                            </button>
+                            <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold ${
+                              sector.quadrant === 'Leading'
+                                ? 'bg-emerald-500/20 text-emerald-300'
+                                : sector.quadrant === 'Improving'
+                                ? 'bg-cyan-500/20 text-cyan-300'
+                                : sector.quadrant === 'Weakening'
+                                ? 'bg-amber-500/20 text-amber-300'
+                                : 'bg-rose-500/20 text-rose-300'
+                            }`}>
+                              {sector.quadrant}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between text-[10px] text-slate-400 pl-5.5">
+                          <span>Weight: {sector.weightPct}%</span>
+                          <span>RS-Mom: {sector.rsMomentum}</span>
+                          <span className="text-emerald-400 font-mono font-medium">{count} scrips</span>
+                        </div>
                       </div>
-                      <div className="flex items-center justify-between text-[10px] text-slate-400">
-                        <span>Weight: {sector.weightPct}%</span>
-                        <span>RS-Mom: {sector.rsMomentum}</span>
-                        <span className={sector.macroStatus === 'Tailwind' ? 'text-emerald-400' : 'text-slate-400'}>
-                          {sector.macroStatus}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
@@ -957,10 +1245,10 @@ export function App() {
                 </div>
 
                 <div className="space-y-2 flex-1 overflow-y-auto max-h-[380px] pr-1">
-                  {INDUSTRY_GROUPS.filter((i) => i.sectorId === selectedSectorId).length === 0 ? (
-                    <div className="p-4 text-xs text-slate-400 text-center">No industry groups mapped for this sector</div>
+                  {INDUSTRY_GROUPS.filter((i) => i.sectorId === activeSector.id).length === 0 ? (
+                    <div className="p-4 text-xs text-slate-400 text-center">No industry groups mapped for {activeSector.name}</div>
                   ) : (
-                    INDUSTRY_GROUPS.filter((i) => i.sectorId === selectedSectorId).map((ind) => (
+                    INDUSTRY_GROUPS.filter((i) => i.sectorId === activeSector.id).map((ind) => (
                       <div
                         key={ind.id}
                         onClick={() => {
@@ -969,7 +1257,7 @@ export function App() {
                           if (matchBase) setSelectedBaseIndustryId(matchBase.id);
                         }}
                         className={`p-3 rounded-xl border transition-all cursor-pointer ${
-                          selectedIndustryId === ind.id
+                          activeIndustry.id === ind.id
                             ? 'bg-teal-500/15 border-teal-500/40 text-white shadow-sm'
                             : 'bg-slate-950/60 border-slate-800 hover:border-slate-700 text-slate-300'
                         }`}
@@ -1008,15 +1296,15 @@ export function App() {
                 </div>
 
                 <div className="space-y-2 flex-1 overflow-y-auto max-h-[380px] pr-1">
-                  {BASE_INDUSTRIES.filter((b) => b.industryId === selectedIndustryId).length === 0 ? (
-                    <div className="p-4 text-xs text-slate-400 text-center">No base industries mapped for this industry</div>
+                  {BASE_INDUSTRIES.filter((b) => b.industryId === activeIndustry.id).length === 0 ? (
+                    <div className="p-4 text-xs text-slate-400 text-center">No base industries mapped for {activeIndustry.name}</div>
                   ) : (
-                    BASE_INDUSTRIES.filter((b) => b.industryId === selectedIndustryId).map((base) => (
+                    BASE_INDUSTRIES.filter((b) => b.industryId === activeIndustry.id).map((base) => (
                       <div
                         key={base.id}
                         onClick={() => setSelectedBaseIndustryId(base.id)}
                         className={`p-3 rounded-xl border transition-all cursor-pointer ${
-                          selectedBaseIndustryId === base.id
+                          activeBaseIndustry.id === base.id
                             ? 'bg-cyan-500/15 border-cyan-500/40 text-white shadow-sm'
                             : 'bg-slate-950/60 border-slate-800 hover:border-slate-700 text-slate-300'
                         }`}
@@ -1049,11 +1337,28 @@ export function App() {
                   <div className="flex items-center gap-2">
                     <span className="w-5 h-5 rounded-md bg-emerald-500/20 text-emerald-400 font-bold text-xs flex items-center justify-center">4</span>
                     <h3 className="text-sm font-bold uppercase tracking-wider text-white">
-                      Constituent Stocks: <span className="text-emerald-400">{candidateScope === 'all' ? 'All Nifty 500 Candidates' : candidateScope === 'sector' ? activeSector.name : activeBaseIndustry.name}</span>
+                      Constituent Stocks:{' '}
+                      <span className="text-emerald-400">
+                        {candidateScope === 'all' || selectedSectorIds.length === MACRO_SECTORS.length
+                          ? 'All Nifty 500 Candidates'
+                          : candidateScope === 'sector'
+                          ? selectedQuadrants.length > 0 && selectedSectorIds.length > 1
+                            ? `${selectedQuadrants.join(' & ')} Quadrants (${selectedSectorIds.length} Sectors: ${selectedSectorIds.map((id) => getSectorShortLabel(id)).join(', ')})`
+                            : selectedSectorIds.length === 1
+                            ? MACRO_SECTORS.find((s) => s.id === selectedSectorIds[0])?.name || activeSector.name
+                            : `${selectedSectorIds.length} Selected Sectors (${selectedSectorIds.map((id) => getSectorShortLabel(id)).join(', ')})`
+                          : activeBaseIndustry.name}
+                      </span>
                     </h3>
                   </div>
                   <p className="text-xs text-slate-400 mt-0.5">
-                    Integrated Value-Momentum evaluation with custom metric ranges &amp; calculated lot sizes
+                    {candidateScope === 'sector'
+                      ? selectedQuadrants.length > 0
+                        ? `Filtered strictly by ${selectedQuadrants.join(', ')} quadrant sectors (${selectedSectorIds.map((id) => getSectorShortLabel(id)).join(', ')}) • Showing ${filteredHierarchyStocks.length} matching scrips below`
+                        : selectedSectorIds.length === 1
+                        ? `Filtered by ${MACRO_SECTORS.find((s) => s.id === selectedSectorIds[0])?.name || activeSector.name} • Showing ${filteredHierarchyStocks.length} matching scrips below`
+                        : `Filtered by ${selectedSectorIds.length} macro sectors • Showing ${filteredHierarchyStocks.length} matching scrips below`
+                      : 'Integrated Value-Momentum evaluation with custom metric ranges & calculated lot sizes'}
                   </p>
                 </div>
 
@@ -1075,7 +1380,7 @@ export function App() {
                         candidateScope === 'sector' ? 'bg-slate-800 text-white font-semibold' : 'text-slate-400 hover:text-slate-200'
                       }`}
                     >
-                      Sector
+                      Selected Sectors ({selectedSectorIds.length})
                     </button>
                     <button
                       onClick={() => setCandidateScope('all')}
@@ -1083,7 +1388,7 @@ export function App() {
                         candidateScope === 'all' ? 'bg-slate-800 text-white font-semibold' : 'text-slate-400 hover:text-slate-200'
                       }`}
                     >
-                      All Stocks ({STOCK_SCRIPS.length})
+                      All Stocks ({stockScrips.length})
                     </button>
                   </div>
 
@@ -1250,35 +1555,39 @@ export function App() {
                   ))}
                 </div>
 
-                {/* Val-Mo Score Threshold Controller */}
-                <div className="flex items-center gap-3 bg-slate-900/80 px-3 py-1.5 rounded-xl border border-slate-800">
+                {/* Val-Mo Score Range Bucket Controller */}
+                <div className="flex items-center gap-2.5 bg-slate-900/80 px-3 py-1.5 rounded-xl border border-slate-800">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-slate-400 font-semibold text-[11px]">Min Val-Mo:</span>
-                    <span className="font-mono font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 text-xs">
-                      {minValMoScore > 0 ? `≥ ${minValMoScore}` : 'All (0)'}
+                    <span className="text-slate-400 font-semibold text-[11px] whitespace-nowrap">Val-Mo Range:</span>
+                    <span className="font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 text-xs whitespace-nowrap">
+                      {VAL_MO_SCORE_RANGES.find((r) => r.id === valMoRange)?.badge || 'All (0–100)'}
                     </span>
                   </div>
                   <div className="flex items-center gap-1">
-                    {[0, 70, 80, 85, 90].map((score) => (
-                      <button
-                        key={score}
-                        onClick={() => setMinValMoScore(score)}
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
-                          minValMoScore === score
-                            ? 'bg-emerald-500 text-slate-950 shadow-sm'
-                            : 'bg-slate-950 border border-slate-800 text-slate-400 hover:text-white'
-                        }`}
-                      >
-                        {score === 0 ? 'Off' : `${score}+`}
-                      </button>
-                    ))}
+                    {VAL_MO_SCORE_RANGES.map((range) => {
+                      const isSelected = valMoRange === range.id;
+                      return (
+                        <button
+                          key={range.id}
+                          onClick={() => setValMoRange(range.id)}
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer whitespace-nowrap ${
+                            isSelected
+                              ? 'bg-emerald-500 text-slate-950 shadow-sm font-black'
+                              : 'bg-slate-950 border border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
+                          }`}
+                          title={`Filter scrips with Val-Mo score in range ${range.badge}`}
+                        >
+                          {range.label}
+                        </button>
+                      );
+                    })}
                   </div>
                   {/* Factor Legend */}
                   <div className="hidden lg:flex items-center gap-2 border-l border-slate-800 pl-3 text-[10px] font-mono">
-                    <span className="flex items-center gap-1 text-cyan-400">
+                    <span className="flex items-center gap-1 text-cyan-400 whitespace-nowrap">
                       <span className="w-2 h-2 rounded-full bg-cyan-400" /> Value %
                     </span>
-                    <span className="flex items-center gap-1 text-emerald-400">
+                    <span className="flex items-center gap-1 text-emerald-400 whitespace-nowrap">
                       <span className="w-2 h-2 rounded-full bg-emerald-400" /> Momentum %
                     </span>
                   </div>
@@ -1287,7 +1596,10 @@ export function App() {
 
               {filteredHierarchyStocks.length === 0 ? (
                 <div className="p-8 text-center text-xs text-slate-400 border border-slate-800 rounded-xl bg-slate-950/40 space-y-3">
-                  <p>No candidate scrips match the active filters (ROCE ≥ {minRoce}%, D/E ≤ {maxDebtToEquity}x, PEG ≤ {maxPeg}x, Val-Mo ≥ {minValMoScore}).</p>
+                  <p>
+                    No candidate scrips match the active filters (ROCE ≥ {minRoce}%, D/E ≤ {maxDebtToEquity}x, PEG ≤ {maxPeg}x
+                    {valMoRange !== 'all' ? `, Val-Mo Range: ${VAL_MO_SCORE_RANGES.find((r) => r.id === valMoRange)?.badge}` : ''}).
+                  </p>
                   <button
                     onClick={resetFiltersToDefault}
                     className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium transition-colors cursor-pointer"
@@ -1330,7 +1642,32 @@ export function App() {
                         return (
                           <tr key={stock.symbol} className="hover:bg-slate-800/30">
                             <td className="py-3 px-3">
-                              <div className="font-bold text-white">{stock.symbol}</div>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-bold text-white">{stock.symbol}</span>
+                                {(() => {
+                                  const sec = MACRO_SECTORS.find((m) => m.id === stock.sectorId);
+                                  const quad = sec?.quadrant || 'Leading';
+                                  const quadStyles = {
+                                    Leading: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+                                    Improving: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30',
+                                    Weakening: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
+                                    Lagging: 'bg-rose-500/15 text-rose-300 border-rose-500/30',
+                                  };
+                                  return (
+                                    <span
+                                      className={`text-[9px] px-1.5 py-0.5 rounded border font-semibold flex items-center gap-1 ${quadStyles[quad]}`}
+                                      title={`Sector: ${sec?.name || stock.sectorId} (${quad} Quadrant)`}
+                                    >
+                                      <span className={`w-1.5 h-1.5 rounded-full ${
+                                        quad === 'Leading' ? 'bg-emerald-400' :
+                                        quad === 'Improving' ? 'bg-cyan-400' :
+                                        quad === 'Weakening' ? 'bg-amber-400' : 'bg-rose-400'
+                                      }`} />
+                                      <span>{quad} • {getSectorShortLabel(stock.sectorId)}</span>
+                                    </span>
+                                  );
+                                })()}
+                              </div>
                               <div className="text-[10px] text-slate-400 truncate max-w-[140px]">{stock.name}</div>
                             </td>
                             <td className="py-3 px-3 text-white font-mono font-semibold">
@@ -2327,6 +2664,20 @@ export function App() {
           <span className="text-[11px] text-slate-600">Nifty 500 Regime &amp; Val-Mo Strategy Framework</span>
         </div>
       </footer>
+
+      {/* ASD-STE100 Terminal Strategy Assistant */}
+      <ApplicationHelperChat
+        activeRegime={activeRegime}
+        allRegimes={REGIMES_DATA}
+        macroSectors={MACRO_SECTORS}
+        stockScrips={stockScrips}
+        selectedSectorIds={selectedSectorIds}
+        selectedQuadrants={selectedQuadrants}
+        capitalConfig={capitalConfig}
+        portfolio={portfolio}
+        onSelectQuadrant={handleToggleQuadrant}
+        onSelectSector={handleSelectSector}
+      />
     </div>
   );
 }

@@ -1,12 +1,18 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import * as d3 from 'd3';
-import { MacroSector } from '../types/strategy';
-import { Activity, Info, TrendingUp, TrendingDown, PieChart } from 'lucide-react';
+import { MacroSector, RrgQuadrant } from '../types/strategy';
+import { PieChart, CheckSquare, Square, RotateCcw, Check, X, Filter } from 'lucide-react';
 
-interface SectorTreemapProps {
+export interface SectorTreemapProps {
   sectors: MacroSector[];
-  selectedSectorId: string;
-  onSelectSector: (sectorId: string) => void;
+  selectedSectorIds: string[];
+  activeFocusSectorId: string;
+  onToggleSector: (sectorId: string) => void;
+  onSelectOnlySector: (sectorId: string) => void;
+  onSelectAllSectors: () => void;
+  onClearSectors: () => void;
+  selectedQuadrants: RrgQuadrant[];
+  onToggleQuadrant: (quadrant: RrgQuadrant) => void;
 }
 
 interface TreemapNode extends d3.HierarchyRectangularNode<any> {
@@ -16,16 +22,29 @@ interface TreemapNode extends d3.HierarchyRectangularNode<any> {
     weightPct: number;
     rsMomentum: number;
     rsRatio: number;
-    quadrant: string;
+    quadrant: RrgQuadrant;
     macroStatus: string;
     catalysts?: string[];
   };
 }
 
+const QUADRANTS: { id: RrgQuadrant; label: string; activeClass: string; dotClass: string }[] = [
+  { id: 'Leading', label: 'Leading', activeClass: 'bg-emerald-500 text-slate-950 font-bold border-emerald-400', dotClass: 'bg-emerald-400' },
+  { id: 'Improving', label: 'Improving', activeClass: 'bg-cyan-500 text-slate-950 font-bold border-cyan-400', dotClass: 'bg-cyan-400' },
+  { id: 'Weakening', label: 'Weakening', activeClass: 'bg-amber-500 text-slate-950 font-bold border-amber-400', dotClass: 'bg-amber-400' },
+  { id: 'Lagging', label: 'Lagging', activeClass: 'bg-rose-500 text-white font-bold border-rose-400', dotClass: 'bg-rose-400' },
+];
+
 export function SectorTreemap({
   sectors,
-  selectedSectorId,
-  onSelectSector,
+  selectedSectorIds,
+  activeFocusSectorId,
+  onToggleSector,
+  onSelectOnlySector,
+  onSelectAllSectors,
+  onClearSectors,
+  selectedQuadrants,
+  onToggleQuadrant,
 }: SectorTreemapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [hoveredSector, setHoveredSector] = useState<MacroSector | null>(null);
@@ -38,7 +57,6 @@ export function SectorTreemap({
     const observer = new ResizeObserver((entries) => {
       if (!entries || entries.length === 0) return;
       const { width } = entries[0].contentRect;
-      // Maintain attractive institutional aspect ratio
       const height = Math.max(300, Math.min(380, Math.round(width * 0.38)));
       setDimensions({ width: Math.max(320, width), height });
     });
@@ -72,12 +90,8 @@ export function SectorTreemap({
     return treemapLayout(hierarchy);
   }, [sectors, dimensions]);
 
-  // Interpolate institutional color scale based on RS-Momentum
+  // Color mapping based on RS-Momentum
   const getColor = (rsMomentum: number, isSelected: boolean) => {
-    // 102+ : Leading (Strong Green / Emerald)
-    // 100 - 102 : Improving (Teal / Cyan)
-    // 98 - 100 : Weakening (Amber / Gold)
-    // <98 : Lagging (Crimson / Rose)
     if (rsMomentum >= 102.5) return isSelected ? '#10b981' : '#059669';
     if (rsMomentum >= 101.0) return isSelected ? '#14b8a6' : '#0d9488';
     if (rsMomentum >= 100.0) return isSelected ? '#06b6d4' : '#0891b2';
@@ -87,43 +101,91 @@ export function SectorTreemap({
 
   const leaves = (rootNode.leaves() as TreemapNode[]) || [];
 
+  // Summary calculations
+  const totalSelectedWeight = useMemo(() => {
+    return Number(
+      sectors
+        .filter((s) => selectedSectorIds.includes(s.id))
+        .reduce((sum, s) => sum + s.weightPct, 0)
+        .toFixed(1)
+    );
+  }, [sectors, selectedSectorIds]);
+
+  const quadrantCounts = useMemo(() => {
+    const counts: Record<RrgQuadrant, number> = {
+      Leading: 0,
+      Improving: 0,
+      Weakening: 0,
+      Lagging: 0,
+    };
+    sectors.forEach((s) => {
+      counts[s.quadrant] = (counts[s.quadrant] || 0) + 1;
+    });
+    return counts;
+  }, [sectors]);
+
   return (
     <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 shadow-xl relative overflow-hidden">
       {/* Treemap Header & Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 mb-4">
         <div>
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-emerald-400 bg-emerald-400/10 px-2.5 py-0.5 rounded border border-emerald-400/20">
               <PieChart className="h-3 w-3" /> Relative Strength Heatmap
             </span>
             <span className="text-xs font-semibold text-slate-300">
-              Nifty 500 Market Cap &amp; Momentum Treemap
+              Nifty 500 Multi-Sector &amp; Quadrant Filter
             </span>
           </div>
           <p className="text-[11px] text-slate-400 mt-0.5">
-            Tile size = Nifty 500 Sector Weight % • Tile color = RRG RS-Momentum velocity • Click any tile to filter hierarchy below
+            Click any tile to toggle scrip filtering below • Select quadrants (Leading, Improving, Weakening, Lagging) to filter sectors in bulk
           </p>
         </div>
 
-        {/* Legend */}
-        <div className="flex items-center gap-2 self-start sm:self-auto bg-slate-950/70 p-1.5 rounded-xl border border-slate-800/80 text-[10px]">
-          <span className="text-slate-400 font-semibold px-1">RS-Mom Scale:</span>
-          <div className="flex items-center gap-1">
-            <span className="w-2.5 h-2.5 rounded bg-rose-600 inline-block" />
-            <span className="text-slate-300">&lt;98 (Lagging)</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <span className="w-2.5 h-2.5 rounded bg-amber-500 inline-block" />
-            <span className="text-slate-300">98–100 (Weakening)</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <span className="w-2.5 h-2.5 rounded bg-cyan-600 inline-block" />
-            <span className="text-slate-300">100–101 (Improving)</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <span className="w-2.5 h-2.5 rounded bg-emerald-600 inline-block" />
-            <span className="text-slate-300">&gt;101 (Leading)</span>
-          </div>
+        {/* Quadrant Quick Selectors & Select All / Clear */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-[10px] text-slate-400 font-semibold mr-1 flex items-center gap-1">
+            <Filter className="h-3 w-3 text-cyan-400" /> Filter by:
+          </span>
+
+          {QUADRANTS.map((quad) => {
+            const count = quadrantCounts[quad.id];
+            const isActive = selectedQuadrants.includes(quad.id);
+            return (
+              <button
+                key={quad.id}
+                onClick={() => onToggleQuadrant(quad.id)}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] border transition-all cursor-pointer ${
+                  isActive
+                    ? quad.activeClass
+                    : 'bg-slate-950/80 border-slate-800 text-slate-300 hover:border-slate-700 hover:text-white'
+                }`}
+                title={`Filter to all ${quad.label} sectors (${count} sectors)`}
+              >
+                <span className={`w-2 h-2 rounded-full ${quad.dotClass}`} />
+                <span>{quad.label}</span>
+                <span className="opacity-75 font-mono text-[10px]">({count})</span>
+              </button>
+            );
+          })}
+
+          <div className="h-4 w-px bg-slate-800 mx-1 hidden sm:block" />
+
+          <button
+            onClick={onSelectAllSectors}
+            className="px-2 py-1 bg-slate-950/80 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white rounded-lg text-[11px] font-medium transition-colors cursor-pointer"
+            title="Select all 13 macro sectors"
+          >
+            All Sectors ({sectors.length})
+          </button>
+
+          <button
+            onClick={onClearSectors}
+            className="px-2 py-1 bg-slate-950/80 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-rose-300 rounded-lg text-[11px] font-medium transition-colors cursor-pointer flex items-center gap-1"
+            title="Reset to default sector"
+          >
+            <RotateCcw className="h-3 w-3" /> Reset
+          </button>
         </div>
       </div>
 
@@ -137,11 +199,11 @@ export function SectorTreemap({
           {leaves.map((leaf) => {
             const w = Math.max(0, leaf.x1 - leaf.x0);
             const h = Math.max(0, leaf.y1 - leaf.y0);
-            const isSelected = leaf.data.id === selectedSectorId;
+            const isSelected = selectedSectorIds.includes(leaf.data.id);
+            const isFocused = leaf.data.id === activeFocusSectorId;
             const isHovered = hoveredSector?.id === leaf.data.id;
             const fillColor = getColor(leaf.data.rsMomentum, isSelected);
 
-            // Hide or condense text if cell is too small
             const showName = w > 65 && h > 35;
             const showDetails = w > 90 && h > 55;
             const showExtra = w > 140 && h > 80;
@@ -150,7 +212,7 @@ export function SectorTreemap({
               <g
                 key={leaf.data.id}
                 transform={`translate(${leaf.x0}, ${leaf.y0})`}
-                onClick={() => onSelectSector(leaf.data.id)}
+                onClick={() => onToggleSector(leaf.data.id)}
                 onMouseEnter={() => setHoveredSector(leaf.data as MacroSector)}
                 onMouseLeave={() => setHoveredSector(null)}
                 className="cursor-pointer transition-all duration-200"
@@ -159,14 +221,14 @@ export function SectorTreemap({
                 <rect
                   width={w}
                   height={h}
-                  rx={5}
+                  rx={6}
                   fill={fillColor}
-                  fillOpacity={isSelected ? 0.95 : isHovered ? 0.85 : 0.65}
-                  stroke={isSelected ? '#34d399' : isHovered ? '#ffffff' : '#0f172a'}
+                  fillOpacity={isSelected ? 0.95 : isHovered ? 0.65 : 0.28}
+                  stroke={isSelected ? '#34d399' : isHovered ? '#ffffff' : '#1e293b'}
                   strokeWidth={isSelected ? 2.5 : isHovered ? 1.5 : 1}
                   className="transition-all duration-150"
                   style={{
-                    filter: isSelected ? 'drop-shadow(0 0 6px rgba(52, 211, 153, 0.4))' : 'none',
+                    filter: isSelected ? 'drop-shadow(0 0 8px rgba(52, 211, 153, 0.45))' : 'none',
                   }}
                 />
 
@@ -174,9 +236,9 @@ export function SectorTreemap({
                 <rect
                   width={w}
                   height={h}
-                  rx={5}
+                  rx={6}
                   fill="url(#cell-overlay-grad)"
-                  opacity={0.35}
+                  opacity={isSelected ? 0.35 : 0.15}
                   pointerEvents="none"
                 />
 
@@ -185,21 +247,31 @@ export function SectorTreemap({
                   <foreignObject width={w} height={h} className="pointer-events-none p-2">
                     <div className="h-full flex flex-col justify-between overflow-hidden text-white font-sans">
                       <div>
-                        <div className="font-black text-xs leading-tight drop-shadow truncate">
-                          {leaf.data.name}
+                        <div className="flex items-center justify-between gap-1">
+                          <span className={`font-black text-xs leading-tight truncate ${isSelected ? 'text-white' : 'text-slate-300'}`}>
+                            {leaf.data.name}
+                          </span>
+                          {/* Selected Checkbox Indicator */}
+                          <span className={`shrink-0 text-[10px] px-1 py-0.2 rounded font-mono font-bold ${
+                            isSelected
+                              ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-400/40'
+                              : 'bg-black/40 text-slate-400'
+                          }`}>
+                            {isSelected ? '✓' : ''}
+                          </span>
                         </div>
-                        <div className="text-[11px] font-bold text-white/90 drop-shadow mt-0.5 font-mono">
+                        <div className={`text-[11px] font-bold drop-shadow mt-0.5 font-mono ${isSelected ? 'text-white/95' : 'text-slate-400'}`}>
                           {leaf.data.weightPct}% Weight
                         </div>
                       </div>
 
                       {showDetails && (
                         <div className="mt-auto flex items-center justify-between text-[10px] text-white/90">
-                          <span className="font-mono bg-black/40 px-1 py-0.2 rounded font-semibold">
+                          <span className={`font-mono px-1 py-0.2 rounded font-semibold ${isSelected ? 'bg-black/50 text-emerald-300' : 'bg-black/40 text-slate-400'}`}>
                             Mom: {leaf.data.rsMomentum}
                           </span>
                           {showExtra && (
-                            <span className="bg-black/30 px-1.5 py-0.2 rounded font-semibold text-[9px] uppercase tracking-wider">
+                            <span className="bg-black/40 px-1.5 py-0.2 rounded font-semibold text-[9px] uppercase tracking-wider text-slate-200">
                               {leaf.data.quadrant}
                             </span>
                           )}
@@ -215,8 +287,8 @@ export function SectorTreemap({
           {/* Gradients */}
           <defs>
             <linearGradient id="cell-overlay-grad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#ffffff" stopOpacity="0.25" />
-              <stop offset="100%" stopColor="#000000" stopOpacity="0.5" />
+              <stop offset="0%" stopColor="#ffffff" stopOpacity="0.3" />
+              <stop offset="100%" stopColor="#000000" stopOpacity="0.6" />
             </linearGradient>
           </defs>
         </svg>
@@ -228,7 +300,8 @@ export function SectorTreemap({
               <span className="font-black text-white">{hoveredSector.name}</span>
               <span className={`text-[10px] px-1.5 py-0.2 rounded font-semibold ${
                 hoveredSector.quadrant === 'Leading' ? 'bg-emerald-500/20 text-emerald-300' :
-                hoveredSector.quadrant === 'Improving' ? 'bg-cyan-500/20 text-cyan-300' : 'bg-rose-500/20 text-rose-300'
+                hoveredSector.quadrant === 'Improving' ? 'bg-cyan-500/20 text-cyan-300' :
+                hoveredSector.quadrant === 'Weakening' ? 'bg-amber-500/20 text-amber-300' : 'bg-rose-500/20 text-rose-300'
               }`}>
                 {hoveredSector.quadrant}
               </span>
@@ -237,24 +310,70 @@ export function SectorTreemap({
               <div>Weight: <strong className="text-white">{hoveredSector.weightPct}%</strong></div>
               <div>RS-Mom: <strong className="text-emerald-400">{hoveredSector.rsMomentum}</strong></div>
               <div>RS-Ratio: <strong>{hoveredSector.rsRatio}</strong></div>
-              <div>Status: <strong className={hoveredSector.macroStatus === 'Tailwind' ? 'text-emerald-400' : 'text-slate-400'}>{hoveredSector.macroStatus}</strong></div>
+              <div>Filter: <strong className={selectedSectorIds.includes(hoveredSector.id) ? 'text-emerald-400' : 'text-slate-400'}>
+                {selectedSectorIds.includes(hoveredSector.id) ? 'Selected (Active)' : 'Unselected'}
+              </strong></div>
             </div>
-            <div className="text-[10px] text-slate-400 truncate">
-              Click tile to filter drill-down hierarchy to this sector
+            <div className="text-[10px] text-cyan-400 font-medium">
+              {selectedSectorIds.length === 1 && selectedSectorIds.includes(hoveredSector.id)
+                ? 'Click tile again to select ALL sectors'
+                : selectedSectorIds.length === sectors.length
+                ? `Click to isolate ${hoveredSector.name}`
+                : `Click tile to ${selectedSectorIds.includes(hoveredSector.id) ? 'remove from' : 'add to'} scrip table filter`}
             </div>
           </div>
         )}
       </div>
 
-      {/* Selected Sector Context Strip */}
-      <div className="mt-2.5 flex items-center justify-between text-xs text-slate-400">
-        <span className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          Active Treemap Selection: <strong className="text-white font-semibold">{sectors.find((s) => s.id === selectedSectorId)?.name}</strong> ({sectors.find((s) => s.id === selectedSectorId)?.weightPct}% Weight)
-        </span>
-        <span className="text-[11px] text-teal-400 font-medium hidden sm:inline">
-          Tip: Click any sector tile to navigate its industries and constituent scrips below
-        </span>
+      {/* Selected Sector Context & Chips Strip */}
+      <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-xs">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-slate-400 font-semibold text-[11px] flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            {selectedSectorIds.length === sectors.length
+              ? 'All 13 Macro Sectors Active (100% Universe):'
+              : `Filtered (${selectedSectorIds.length} Sector${selectedSectorIds.length > 1 ? 's' : ''} • ${totalSelectedWeight}% Weight):`}
+          </span>
+
+          {selectedSectorIds.length === sectors.length ? (
+            <span className="text-[11px] px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 font-medium">
+              All Sectors Selected • Full Nifty 500 Candidate Pool
+            </span>
+          ) : (
+            selectedSectorIds.map((id) => {
+              const s = sectors.find((item) => item.id === id);
+              if (!s) return null;
+              return (
+                <span
+                  key={id}
+                  className="inline-flex items-center gap-1 text-[11px] bg-slate-950 border border-emerald-500/30 text-emerald-300 px-2 py-0.5 rounded-md"
+                >
+                  <span>{s.name}</span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToggleSector(id);
+                    }}
+                    className="hover:text-white text-emerald-400/80 ml-0.5 cursor-pointer"
+                    title={`Remove ${s.name} from filter`}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              );
+            })
+          )}
+
+          {selectedSectorIds.length === 1 && (
+            <span className="text-[10px] text-cyan-400/90 italic ml-1">
+              (Click tile again to select all sectors)
+            </span>
+          )}
+        </div>
+
+        <div className="text-[11px] text-slate-400">
+          Showing scrips from <strong className="text-white">{selectedSectorIds.length}</strong> {selectedSectorIds.length === 1 ? 'sector' : 'sectors'} in table below
+        </div>
       </div>
     </div>
   );
