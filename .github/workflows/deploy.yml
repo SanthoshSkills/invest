@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - geminigoofups
   workflow_dispatch:
 
 permissions:
