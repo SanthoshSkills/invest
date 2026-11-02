@@ -98,11 +98,75 @@ export function App() {
   const [selectedIndustryId, setSelectedIndustryId] = useState<string>('power_td');
   const [selectedBaseIndustryId, setSelectedBaseIndustryId] = useState<string>('transformers');
 
+  // Global Scrip State & Real-Time Price Calibration
+  const [stockScrips, setStockScrips] = useState<StockScrip[]>(STOCK_SCRIPS);
+  const [editingScripPrice, setEditingScripPrice] = useState<{ symbol: string; name: string; currentPrice: number; newPrice: string } | null>(null);
+
   // Global Scrip Search State
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [inspectedScrip, setInspectedScrip] = useState<StockScrip | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const handleUpdateScripPrice = (symbol: string, newPriceNum: number) => {
+    if (isNaN(newPriceNum) || newPriceNum <= 0) return;
+    setStockScrips((prev) =>
+      prev.map((s) => {
+        if (s.symbol !== symbol) return s;
+        const ratio = newPriceNum / (s.price || 1);
+        const isAbove = newPriceNum >= s.dma50;
+        const updatedLot = s.calculatedLotShares > 0 ? Math.max(1, Math.round(capitalConfig.minPositionSize / newPriceNum)) : 0;
+        return {
+          ...s,
+          price: newPriceNum,
+          above50Dma: isAbove,
+          pe: Number((s.pe * ratio).toFixed(1)),
+          pyramidUpTriggerPrice: Math.round(newPriceNum * 1.06),
+          pyramidDownStopLossPrice: Math.round(newPriceNum * 0.935),
+          extremeValuationTrimPrice: Math.round(newPriceNum * 1.35),
+          calculatedLotShares: updatedLot,
+        };
+      })
+    );
+
+    setInspectedScrip((curr) => {
+      if (!curr || curr.symbol !== symbol) return curr;
+      const ratio = newPriceNum / (curr.price || 1);
+      const isAbove = newPriceNum >= curr.dma50;
+      const updatedLot = curr.calculatedLotShares > 0 ? Math.max(1, Math.round(capitalConfig.minPositionSize / newPriceNum)) : 0;
+      return {
+        ...curr,
+        price: newPriceNum,
+        above50Dma: isAbove,
+        pe: Number((curr.pe * ratio).toFixed(1)),
+        pyramidUpTriggerPrice: Math.round(newPriceNum * 1.06),
+        pyramidDownStopLossPrice: Math.round(newPriceNum * 0.935),
+        extremeValuationTrimPrice: Math.round(newPriceNum * 1.35),
+        calculatedLotShares: updatedLot,
+      };
+    });
+
+    setPortfolio((prev) => ({
+      ...prev,
+      positions: prev.positions.map((pos) => {
+        if (pos.symbol !== symbol) return pos;
+        const currentValue = pos.shares * newPriceNum;
+        const pnl = currentValue - pos.investedAmount;
+        const pnlPct = Number(((pnl / (pos.investedAmount || 1)) * 100).toFixed(2));
+        return {
+          ...pos,
+          currentPrice: newPriceNum,
+          currentValue,
+          pnl,
+          pnlPct,
+        };
+      }),
+    }));
+
+    setEditingScripPrice(null);
+    setTradeSuccessMsg(`Updated CMP for ${symbol} to ₹${newPriceNum.toLocaleString('en-IN')}`);
+    setTimeout(() => setTradeSuccessMsg(null), 3500);
+  };
 
   // Keyboard shortcut listener for universal search
   useEffect(() => {
@@ -240,10 +304,10 @@ export function App() {
 
   // Base pool of candidates according to selected scope
   const baseHierarchyPool = useMemo(() => {
-    if (candidateScope === 'all') return STOCK_SCRIPS;
-    if (candidateScope === 'sector') return STOCK_SCRIPS.filter((s) => s.sectorId === selectedSectorId);
-    return STOCK_SCRIPS.filter((s) => s.baseIndustryId === selectedBaseIndustryId);
-  }, [candidateScope, selectedSectorId, selectedBaseIndustryId]);
+    if (candidateScope === 'all') return stockScrips;
+    if (candidateScope === 'sector') return stockScrips.filter((s) => s.sectorId === selectedSectorId);
+    return stockScrips.filter((s) => s.baseIndustryId === selectedBaseIndustryId);
+  }, [candidateScope, selectedSectorId, selectedBaseIndustryId, stockScrips]);
 
   // Filtered by custom ranges & Val-Mo / Status
   const filteredHierarchyStocks = useMemo(() => {
@@ -261,14 +325,14 @@ export function App() {
   const searchResults = useMemo(() => {
     if (!searchQuery.trim()) return [];
     const q = searchQuery.toLowerCase();
-    return STOCK_SCRIPS.filter(
+    return stockScrips.filter(
       (s) => s.symbol.toLowerCase().includes(q) || s.name.toLowerCase().includes(q)
     );
-  }, [searchQuery]);
+  }, [searchQuery, stockScrips]);
 
   // Model Qualified Candidates (Tier 5) with custom filters
   const qualifiedCandidates = useMemo(() => {
-    return STOCK_SCRIPS.filter((s) => {
+    return stockScrips.filter((s) => {
       if (s.qualificationTier !== 'Tier 5 Qualified') return false;
       if (s.roce3Y < minRoce) return false;
       if (s.debtToEquity > maxDebtToEquity) return false;
@@ -277,7 +341,7 @@ export function App() {
       if (statusFilter !== 'all' && s.qualificationTier !== statusFilter) return false;
       return true;
     });
-  }, [minRoce, maxDebtToEquity, maxPeg, minValMoScore, statusFilter]);
+  }, [stockScrips, minRoce, maxDebtToEquity, maxPeg, minValMoScore, statusFilter]);
 
   // Classify qualified candidates by Val-Mo score with Sector & Overall concentration caps
   const classifiedCandidates = useMemo(() => {
@@ -1270,7 +1334,21 @@ export function App() {
                               <div className="text-[10px] text-slate-400 truncate max-w-[140px]">{stock.name}</div>
                             </td>
                             <td className="py-3 px-3 text-white font-mono font-semibold">
-                              ₹{stock.price.toLocaleString('en-IN')}
+                              <div className="flex items-center gap-1.5 group">
+                                <span>₹{stock.price.toLocaleString('en-IN')}</span>
+                                <button
+                                  onClick={() => setEditingScripPrice({
+                                    symbol: stock.symbol,
+                                    name: stock.name,
+                                    currentPrice: stock.price,
+                                    newPrice: String(stock.price),
+                                  })}
+                                  className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-cyan-400 p-0.5 rounded transition-opacity cursor-pointer"
+                                  title={`Edit CMP for ${stock.symbol}`}
+                                >
+                                  <SlidersHorizontal className="h-3 w-3" />
+                                </button>
+                              </div>
                             </td>
                             <td className="py-3 px-3">
                               <div className="text-white font-mono">{stock.pe}x</div>
@@ -2047,7 +2125,21 @@ export function App() {
             {/* Metrics Breakdown */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs mb-4">
               <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800">
-                <span className="text-slate-400 block text-[10px]">Current Price</span>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400 block text-[10px]">Current Price</span>
+                  <button
+                    onClick={() => setEditingScripPrice({
+                      symbol: inspectedScrip.symbol,
+                      name: inspectedScrip.name,
+                      currentPrice: inspectedScrip.price,
+                      newPrice: String(inspectedScrip.price),
+                    })}
+                    className="text-[10px] text-cyan-400 hover:text-cyan-300 flex items-center gap-0.5 cursor-pointer"
+                    title="Edit market price"
+                  >
+                    <SlidersHorizontal className="h-3 w-3" /> Edit
+                  </button>
+                </div>
                 <span className="text-sm font-bold text-white">₹{inspectedScrip.price.toLocaleString('en-IN')}</span>
               </div>
               <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800">
@@ -2125,6 +2217,95 @@ export function App() {
         isOpen={isSparklineGuideOpen}
         onClose={() => setIsSparklineGuideOpen(false)}
       />
+
+      {/* Interactive Scrip Price Calibration Modal */}
+      {editingScripPrice && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-6 shadow-2xl relative animate-scale-up">
+            <button
+              onClick={() => setEditingScripPrice(null)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-xs font-bold uppercase tracking-wider text-cyan-400 bg-cyan-400/10 px-2 py-0.5 rounded border border-cyan-400/20">
+                Market Price Calibration
+              </span>
+            </div>
+            <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <span>{editingScripPrice.symbol}</span>
+              <span className="text-xs text-slate-400 font-normal">({editingScripPrice.name})</span>
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">
+              Adjust current market price to test real-time 50-DMA status, P/E multiple recalibration, and quantitative lot allocations.
+            </p>
+
+            <div className="my-4 space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1">
+                  Current Market Price (₹)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-slate-400 font-mono text-sm">₹</span>
+                  <input
+                    type="number"
+                    step="any"
+                    value={editingScripPrice.newPrice}
+                    onChange={(e) =>
+                      setEditingScripPrice({
+                        ...editingScripPrice,
+                        newPrice: e.target.value,
+                      })
+                    }
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-8 pr-4 py-2 text-sm text-white font-mono font-bold focus:outline-none focus:border-cyan-500"
+                    placeholder="Enter price in ₹"
+                  />
+                </div>
+              </div>
+
+              {/* Reference Quick Buttons */}
+              {editingScripPrice.symbol === 'APARINDS' && (
+                <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-300 flex items-center justify-between">
+                  <span>NSE Live Reference CMP: ₹15,680</span>
+                  <button
+                    onClick={() => setEditingScripPrice({ ...editingScripPrice, newPrice: '15680' })}
+                    className="underline text-emerald-400 font-semibold hover:text-emerald-200"
+                  >
+                    Set ₹15,680
+                  </button>
+                </div>
+              )}
+              {editingScripPrice.symbol === 'DIVISLAB' && (
+                <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-300 flex items-center justify-between">
+                  <span>NSE Live Reference CMP: ₹9,945</span>
+                  <button
+                    onClick={() => setEditingScripPrice({ ...editingScripPrice, newPrice: '9945' })}
+                    className="underline text-emerald-400 font-semibold hover:text-emerald-200"
+                  >
+                    Set ₹9,945
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-3 mt-5">
+              <button
+                onClick={() => setEditingScripPrice(null)}
+                className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-medium transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleUpdateScripPrice(editingScripPrice.symbol, parseFloat(editingScripPrice.newPrice))}
+                className="flex-1 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold rounded-xl text-xs transition-colors shadow-md"
+              >
+                Apply Price Update
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Seed Fund & Capital Architecture Modal */}
       <SeedFundModal
