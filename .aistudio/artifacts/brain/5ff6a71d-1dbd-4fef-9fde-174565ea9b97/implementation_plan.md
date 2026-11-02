@@ -1,69 +1,122 @@
-# GitHub Remote Synchronization & Push Workflow
+# GitHub Pages Deployment & Main Branch Convergence Plan
 
-Push the container's committed codebase—including the 4-State Secular Trend indicator, Renko ATR charts, and GitHub Actions Pages deployment pipeline—directly to the remote GitHub repository (`https://github.com/SanthoshSkills/invest.git`) on branch `geminigoofups` (and `main` if desired) using an authenticated Git push.
+Resolve the GitHub Actions check failure (`❌ 0 / 2`), merge all 22 application commits from `geminigoofups` into `main`, and publish the live investment analysis web application to GitHub Pages (`https://santhoshskills.github.io/invest/`).
 
 ## User Review & Critical Decisions
 
 > [!IMPORTANT]
-> - **Confirmed Sync Method**: Direct authenticated `git push` executed from the container environment using a GitHub Personal Access Token (PAT).
-> - **Branch Target**: `geminigoofups` (currently holding commit `7fbdfa2`). Can also fast-forward or push to `main` to trigger the automated GitHub Pages deployment workflow.
-> - **Credential Safety**: The token will be passed securely to the push command without persisting it to `.git/config`, repository files, or shell history.
+> **Summary of Confirmed Choices from Phase 1:**
+> - **Unified Primary Branch**: Merge `geminigoofups` into `main` so that Google AI Studio sync, GitHub default branch, and GitHub Pages deployment all target `main`.
+> - **Application Delivery Method**: You will apply the workflow fixes and merge directly on GitHub (via Pull Request / web interface) or via your local Git terminal, requiring no PAT exposure in the chat.
+> - **GitHub Pages Deployment Source**: Repository Settings &rarr; Pages must have **Source** set to **GitHub Actions** rather than "Deploy from a branch".
 
 ---
 
 ## 1. Overview & Core Concept
 
-- **What It Does**: Transmits all local commits from this isolated cloud container directly to GitHub. Once pushed to GitHub, the `.github/workflows/deploy.yml` pipeline will automatically trigger, build the project with Vite, and publish it live to GitHub Pages (`https://santhoshskills.github.io/invest/`).
-- **Target Audience**: Repository owner (`SanthoshSkills`) looking to see the changes live on GitHub and GitHub Pages.
-- **Key Value**: Resolves the GitHub Pages 404 error by ensuring the repository contains the build workflow and source code.
+- **The Problem Identified from Screenshots**:
+  1. **Branch Divergence**: AI Studio sync was attached to `main` (which only contained the empty 5-commit template), while the completed Secular Trend & Renko charting application lived entirely on `geminigoofups` (22 commits ahead).
+  2. **GitHub Actions ❌ 0 / 2 Failure**: On `geminigoofups`, commit `c328eed` failed because `actions/setup-node@v4` with `cache: 'npm'` failed due to a missing `package-lock.json`, and GitHub Pages environment permissions had not yet been provisioned in repository settings.
+- **The Solution**:
+  1. Merge `geminigoofups` into `main` so both GitHub and AI Studio track the same unified source code.
+  2. Configure GitHub Pages to use **GitHub Actions** under repository settings.
+  3. Ensure the GitHub Actions build workflow and package lock are committed cleanly so the runner builds and publishes the production bundle without errors.
 
 ---
 
-## 2. Synchronization & Deployment Workflow
+## 2. Step-by-Step Resolution Workflow
 
 ```
-┌────────────────────────┐         git push          ┌────────────────────────┐
-│  AI Studio Container   │ ────────────────────────> │      GitHub Repo       │
-│  Branch: geminigoofups │   (via GitHub PAT)        │ SanthoshSkills/invest  │
-│  Commit: 7fbdfa2       │                           └───────────┬────────────┘
-└────────────────────────┘                                       │
-                                                     Triggers Actions Workflow
-                                                                 │
-                                                                 ▼
-                                                     ┌────────────────────────┐
-                                                     │      GitHub Pages      │
-                                                     │ santhoshskills.github  │
-                                                     │       .io/invest/      │
-                                                     └────────────────────────┘
+┌─────────────────────────────────┐           Pull Request / Merge           ┌─────────────────────────────────┐
+│     geminigoofups Branch        │ ───────────────────────────────────────> │           main Branch           │
+│   (22 Commits: Full App)        │                                          │  (AI Studio Sync + Pages Root)  │
+└─────────────────────────────────┘                                          └────────────────┬────────────────┘
+                                                                                              │
+                                                                                Triggers Push to main
+                                                                                              │
+                                                                                              ▼
+                                                                             ┌─────────────────────────────────┐
+                                                                             │      GitHub Actions Run         │
+                                                                             │  .github/workflows/deploy.yml   │
+                                                                             └────────────────┬────────────────┘
+                                                                                              │
+                                                                                Deploys ./dist to Pages
+                                                                                              │
+                                                                                              ▼
+                                                                             ┌─────────────────────────────────┐
+                                                                             │      Live GitHub Pages App      │
+                                                                             │  santhoshskills.github.io/      │
+                                                                             │              invest/            │
+                                                                             └─────────────────────────────────┘
 ```
 
-### Steps to Complete Upon Approval:
-1. **Request / Receive Token**: Prompt user to provide their GitHub PAT (with `repo` / `workflow` permissions).
-2. **Execute Authenticated Push**:
-   - Run `git push https://<token>@github.com/SanthoshSkills/invest.git geminigoofups`
-   - Optionally push to `main` if the user wants immediate deployment to their default branch:
-     `git push https://<token>@github.com/SanthoshSkills/invest.git geminigoofups:main`
-3. **Trigger GitHub Actions & Verify Deployment**:
-   - Verify push success on GitHub.
-   - Instruct user to verify the GitHub Actions run under `https://github.com/SanthoshSkills/invest/actions`.
-   - GitHub Pages URL `https://santhoshskills.github.io/invest/` will become active as soon as the workflow completes.
+### Action 1: Merge `geminigoofups` into `main` on GitHub
+You can complete this directly on GitHub without entering terminal commands:
+1. Navigate to: **`https://github.com/SanthoshSkills/invest/compare/main...geminigoofups`**
+2. Click the green **"Create pull request"** button.
+3. Title it: `Merge geminigoofups into main (Complete App & Pages Deploy)`
+4. Click **"Create pull request"**, then click **"Merge pull request"** &rarr; **"Confirm merge"**.
+5. Once merged, `main` will possess the full application codebase.
+
+### Action 2: Enable GitHub Actions as Pages Source
+In order for GitHub Actions to publish to `https://santhoshskills.github.io/invest/`:
+1. Navigate to **`https://github.com/SanthoshSkills/invest/settings/pages`**
+2. Under **Build and deployment**:
+   - Change **Source** from *"Deploy from a branch"* to **"GitHub Actions"**.
+3. Save changes.
+
+### Action 3: Ensure Clean Workflow Execution & GitHub Pages Base Path
+- **Root Cause of Asset 404s**: When deployed without an explicit base path, Vite defaults to root `/assets/...`. Because GitHub Pages serves the site at `https://santhoshskills.github.io/invest/`, requests to `/assets/...` failed with HTTP 404 instead of reaching `/invest/assets/...`.
+- **Configured `vite.config.ts`**:
+  ```ts
+  base: process.env.GITHUB_ACTIONS || process.env.GITHUB_PAGES ? '/invest/' : './'
+  ```
+  This ensures:
+  1. Automated builds on GitHub Actions prefix all assets with `/invest/` (`/invest/assets/...`), resolving with HTTP 200 on GitHub Pages.
+  2. Local and AI Studio development environments continue using `./` without requiring a path prefix.
+- The workflow in `.github/workflows/deploy.yml` triggers on pushes to both `main` and `geminigoofups`.
 
 ---
 
-## 3. Key Decisions & Alternatives
+## 3. Key Decisions & Trade-Offs
 
-- **Decision 1: Authenticated Push vs. Local Git Pull**:
-  - *Chosen*: Outbound push from the container using user's GitHub PAT.
-  - *Why*: The cloud container does not have an open public SSH/HTTP port for inbound pulling from external machines. Outbound push is immediate, reliable, and keeps all git history intact.
-- **Decision 2: Token Security**:
-  - *Chosen*: Use an ephemeral push command URL without storing the token in `.git/config` or any checked-in project files.
-  - *Why*: Guarantees zero credential leakage in commits or environment configuration.
+- **Decision 1: Merging into `main` vs. Switching AI Studio to `geminigoofups`**:
+  - *Chosen*: Merge `geminigoofups` into `main`.
+  - *Why*: Google AI Studio sync natively tracks `main`. By merging `geminigoofups` into `main`, AI Studio sync remains green and up-to-date, GitHub's default branch displays the real application, and GitHub Pages deploys seamlessly.
+- **Decision 2: GitHub Pull Request Merge vs. Local PAT Push**:
+  - *Chosen*: User performs the merge on GitHub or local terminal.
+  - *Why*: User explicitly preferred applying fixes directly on GitHub or via pull command, keeping credentials secure and in their full control.
 
 ---
 
-## 4. Technical Architecture & Git State
+## 4. Technical Architecture & Component Reference
 
-- **Current Git Branch**: `geminigoofups`
-- **Head Commit**: `7fbdfa2` (`feat: complete secular trend indicator, renko ATR charts, and github pages deployment workflow`)
-- **Remote Origin**: `https://github.com/SanthoshSkills/invest.git`
-- **Workflow File**: `.github/workflows/deploy.yml` (Configured with Vite build, relative base `/invest/`, and `actions/deploy-pages@v4`)
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                        App Root (`src/App.tsx`)                        │
+├───────────────────────────────────┬────────────────────────────────────┤
+│           Watchlist & Radar       │         Strategy Screener          │
+│   • Top Movers & Breadth Matrix   │   • Value-Momentum Multi-Factor    │
+│   • Metric Sparklines & Alerts    │   • Sector Relative Strength       │
+├───────────────────────────────────┴────────────────────────────────────┤
+│        Technical Chart Workbench (`TechnicalChartWorkbench.tsx`)       │
+│   ┌──────────────────────────────────────────────────────────────┐     │
+│   │ 4-State Secular Trend Indicator:                             │     │
+│   │ [1] Super Cycle Bull  [2] Secular Dip                        │     │
+│   │ [3] Counter-Trend     [4] Structural Downtrend               │     │
+│   ├──────────────────────────────────────────────────────────────┤     │
+│   │ 10-EMA Wave Rider (Weekly & Monthly Timeframes)              │     │
+│   ├──────────────────────────────────────────────────────────────┤     │
+│   │ Renko ATR 14 Brick Box Visualization                         │     │
+│   └──────────────────────────────────────────────────────────────┘     │
+├────────────────────────────────────────────────────────────────────────┤
+│                 Execution & Paper Trading Terminal                     │
+│   • Live Position Book & PnL     • Dynamic Sizing Calculator           │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+### Verification & Success Checklist:
+1. [ ] Pull request merged: `geminigoofups` &rarr; `main` on GitHub.
+2. [ ] GitHub Pages source set to **GitHub Actions** in repository settings.
+3. [ ] GitHub Actions workflow under `https://github.com/SanthoshSkills/invest/actions` shows a green checkmark `✔ Deploy to GitHub Pages`.
+4. [ ] `https://santhoshskills.github.io/invest/` loads the live Val-Mo Terminal with all charts and indicators functional.

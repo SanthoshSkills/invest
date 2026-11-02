@@ -8,10 +8,10 @@ Systematic Indian equity strategy and screening terminal tracking Nifty 500 oppo
 
 You have three options for free hosting:
 
-### Option 1: Instant Google Cloud Shared URL (Zero Setup, Active Now)
-The application is **already hosted live** on Google Cloud Run:
-- **Shared App URL**: [https://ais-pre-e7jlziwwvxc2clubac46ma-516653370567.asia-east1.run.app](https://ais-pre-e7jlziwwvxc2clubac46ma-516653370567.asia-east1.run.app)
-- **Status**: Live, 100% free, accessible from any browser on desktop and mobile with zero setup.
+### Option 1: Instant Google Cloud Instance (Zero Setup, Active Now)
+The application is **hosted live** on Google Cloud Run within Google AI Studio:
+- **Dev App URL**: [https://ais-dev-e7jlziwwvxc2clubac46ma-516653370567.asia-east1.run.app](https://ais-dev-e7jlziwwvxc2clubac46ma-516653370567.asia-east1.run.app)
+- **Public Sharing**: Click the **Share** button in the AI Studio top bar to generate a public link, or activate GitHub Pages below.
 
 ---
 

@@ -76,6 +76,11 @@ export function App() {
   // Markdown copy feedback state
   const [copiedFile, setCopiedFile] = useState<string | null>(null);
 
+  // Dynamic live App URL for opening standalone or sharing
+  const liveAppUrl = typeof window !== 'undefined' && window.location.origin
+    ? window.location.origin
+    : 'https://ais-dev-e7jlziwwvxc2clubac46ma-516653370567.asia-east1.run.app';
+
   // Screener Run Engine State
   const [isScreeningModalOpen, setIsScreeningModalOpen] = useState(false);
   const [lastRunTimestamp, setLastRunTimestamp] = useState('2026-10-31 15:35 IST');
@@ -513,10 +518,10 @@ export function App() {
               <span>Run Screener</span>
             </button>
             <a
-              href="https://ais-pre-e7jlziwwvxc2clubac46ma-516653370567.asia-east1.run.app"
+              href={liveAppUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-700/80 hover:border-slate-500 text-slate-200 text-xs font-semibold transition-all whitespace-nowrap"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-700/80 hover:border-slate-500 text-slate-200 text-xs font-semibold transition-all whitespace-nowrap cursor-pointer"
               title="Open terminal in a new standalone browser tab"
             >
               <ExternalLink className="h-3.5 w-3.5 text-cyan-400" />
@@ -1471,22 +1476,22 @@ export function App() {
                 {/* Method 1 */}
                 <div className="p-4 bg-slate-950/80 rounded-xl border border-slate-800 space-y-2">
                   <div className="font-bold text-emerald-400 flex items-center justify-between">
-                    <span>Option 1: Instant Google Cloud Preview (Active Now)</span>
-                    <span className="text-[10px] text-slate-400 font-mono">No Setup</span>
+                    <span>Option 1: Google Cloud Dev & Share URL</span>
+                    <span className="text-[10px] text-slate-400 font-mono">Live</span>
                   </div>
                   <p className="text-slate-400 text-[11px]">
-                    Already deployed and accessible to anyone. Works instantly on desktop and mobile browsers.
+                    Direct instance URL. To share publicly, use the <span className="text-slate-200 font-medium">Share</span> button in Google AI Studio or deploy to GitHub Pages.
                   </p>
                   <div className="flex items-center gap-2 pt-1">
                     <input
                       type="text"
                       readOnly
-                      value="https://ais-pre-e7jlziwwvxc2clubac46ma-516653370567.asia-east1.run.app"
+                      value={liveAppUrl}
                       className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-[11px] font-mono text-slate-300 focus:outline-none"
                     />
                     <button
-                      onClick={() => copyToClipboard('preview-url', 'https://ais-pre-e7jlziwwvxc2clubac46ma-516653370567.asia-east1.run.app')}
-                      className="px-2.5 py-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg text-xs transition-colors whitespace-nowrap"
+                      onClick={() => copyToClipboard('preview-url', liveAppUrl)}
+                      className="px-2.5 py-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg text-xs transition-colors whitespace-nowrap cursor-pointer"
                     >
                       {copiedFile === 'preview-url' ? 'Copied!' : 'Copy Link'}
                     </button>
