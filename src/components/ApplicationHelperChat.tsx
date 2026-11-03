@@ -164,6 +164,12 @@ export const MENU_QUESTIONS: ChatMenuItem[] = [
     prompt: 'How is strategic lot size calculated?',
     category: 'Terminal Engines',
   },
+  {
+    id: 21,
+    title: 'When to exit a stock if it drops off the 32 or momentum universe',
+    prompt: 'If I invested in a stock and it drops off the 32 or momentum universe, how do I know when to exit?',
+    category: 'Execution',
+  },
 ];
 
 interface ChatMessage {
@@ -817,6 +823,45 @@ This guarantees that each position receives an equal, risk-calibrated allocation
       };
     }
 
+    // Question 21 / Exit Rules When a Stock Drops Off the 32 or Momentum Universe
+    if (
+      resolvedId === 21 ||
+      (q.includes('drop') && (q.includes('exit') || q.includes('universe') || q.includes('32') || q.includes('momentum'))) ||
+      (q.includes('when') && q.includes('exit') && (q.includes('stock') || q.includes('invested') || q.includes('drops'))) ||
+      (q.includes('how') && q.includes('know') && q.includes('exit'))
+    ) {
+      return {
+        text: `Portfolio Exit Framework When a Stock Drops Off the 32-Scrip Universe:
+
+1. Critical Rule: Screening Universe vs. Holding Portfolio:
+- The 32 scrips in the terminal represent the weekly ENTRY SCREENING funnel.
+- Dropping off the 32 list (e.g., falling from rank #15 to #18 or #33) does NOT trigger an automatic panic sell.
+- Once capital is deployed, the position is managed by the HOLDING & EXIT LIFECYCLE, not by weekly entry screening churn.
+
+2. The 4 Objective Exit Signals (How You Know Exactly When to Exit):
+
+• Signal 1: Hard Stop-Loss Breaker (-6.5% Intraday) [Capital Defense]:
+  - If CMP breaks -6.5% below your average buy price at any time, execute an immediate exit. This hard floor cuts losses early and prevents catastrophic drawdowns.
+
+• Signal 2: Structural Multi-Timeframe Trend Breakdown (Friday Weekly Close):
+  - Pure Momentum Exit: The stock closes Friday below the Weekly Triple EMA band (EMA-13 or EMA-34), or Daily 9-EMA crosses below 55-EMA, or Weekly ADX drops below 20.
+  - Val-Mo Exit: The stock breaks below its 50-DMA with descending slope on expanding volume on Friday close.
+
+• Signal 3: Macro Sector Rotation Headwind:
+  - If the stock's parent macro sector rotates from Leading/Improving into Lagging on the Relative Rotation Graph (RRG) on consecutive weekly closes, schedule an orderly exit to rotate capital into emerging leaders.
+
+• Signal 4: Extreme Valuation Trim Target (+1.5σ Standard Deviation):
+  - When a compounder runs to statistical extremes (+1.5σ above 5-year median P/E or Weekly RSI > 70–75), trim 50% of the position to secure principal and lock in gains.
+  - Trail the remaining 50% "runner" position along the rising 50-DMA or weekly EMA-13 until a structural breakdown occurs.
+
+3. Live Tracking in the Terminal UI:
+- Open Section 5 (Active Positions) to see live health pills:
+  * 🟢 Screener Qualified · Trend Holding
+  * 🟡 Dropped Off Screener · Trailing Stop Active (Stop: ₹Level)
+  * 🔴 Hard Stop Hit (-6.5%) · Exit Now (with 1-click Exit button).`,
+      };
+    }
+
     // Dynamic stock scrip query fallback
     const foundScrip = stockScrips.find(
       (s) => q.includes(s.symbol.toLowerCase()) || q.includes(s.name.toLowerCase())
@@ -838,7 +883,7 @@ This guarantees that each position receives an equal, risk-calibrated allocation
 
     // Default Fallback
     return {
-      text: `Your query was received. The terminal currently monitors ${stockScrips.length} Nifty 500 scrips across ${macroSectors.length} macro sectors under the active "${activeRegime.name}" regime.\n\nClick the "📋 Menu List" button or type any question number (1 to 20) to view detailed quantitative answers.`,
+      text: `Your query was received. The terminal currently monitors ${stockScrips.length} Nifty 500 scrips across ${macroSectors.length} macro sectors under the active "${activeRegime.name}" regime.\n\nClick the "📋 Menu List" button or type any question number (1 to 21) to view detailed quantitative answers.`,
     };
   };
 
@@ -846,7 +891,7 @@ This guarantees that each position receives an equal, risk-calibrated allocation
     const menuMessage: ChatMessage = {
       id: `menu-${Date.now()}`,
       sender: 'assistant',
-      text: 'Here is the complete Question Menu. Click any item or type its number (1 to 20):',
+      text: 'Here is the complete Question Menu. Click any item or type its number (1 to 21):',
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       isSte100Compliant: true,
       isMenu: true,
@@ -1091,7 +1136,7 @@ This guarantees that each position receives an equal, risk-calibrated allocation
                       </div>
 
                       <div className="text-[10px] text-slate-500 text-center pt-1 font-mono">
-                        💡 Click any card above or type its number below (e.g. 1 to 20)
+                        💡 Click any card above or type its number below (e.g. 1 to 21)
                       </div>
                     </div>
                   )}
@@ -1143,7 +1188,7 @@ This guarantees that each position receives an equal, risk-calibrated allocation
               <span>📋 Question Menu</span>
             </button>
             <span className="text-[10px] text-slate-400">
-              Type <kbd className="px-1 py-0.5 rounded bg-slate-800 text-emerald-400 font-mono font-bold">1</kbd>–<kbd className="px-1 py-0.5 rounded bg-slate-800 text-emerald-400 font-mono font-bold">20</kbd> or <kbd className="px-1 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">menu</kbd>
+              Type <kbd className="px-1 py-0.5 rounded bg-slate-800 text-emerald-400 font-mono font-bold">1</kbd>–<kbd className="px-1 py-0.5 rounded bg-slate-800 text-emerald-400 font-mono font-bold">21</kbd> or <kbd className="px-1 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">menu</kbd>
             </span>
           </div>
 
@@ -1154,7 +1199,7 @@ This guarantees that each position receives an equal, risk-calibrated allocation
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Type question number (e.g. 1 to 20) or query..."
+              placeholder="Type question number (e.g. 1 to 21) or query..."
               className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
             />
             <button

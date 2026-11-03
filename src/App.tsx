@@ -827,6 +827,22 @@ export function App() {
     setTimeout(() => setTradeSuccessMsg(null), 3500);
   };
 
+  // Execution: Exit / Liquidate Position
+  const executeExitPosition = (posId: string) => {
+    const targetPos = portfolio.positions.find((p) => p.id === posId);
+    if (!targetPos) return;
+
+    const returnCash = targetPos.currentValue;
+    setPortfolio((prev) => ({
+      ...prev,
+      cashBalance: prev.cashBalance + returnCash,
+      positions: prev.positions.filter((p) => p.id !== posId),
+    }));
+
+    setTradeSuccessMsg(`Exited position in ${targetPos.symbol} (Returned ₹${returnCash.toLocaleString('en-IN')} to Tactical Cash).`);
+    setTimeout(() => setTradeSuccessMsg(null), 3500);
+  };
+
   // Portfolio Totals
   const totalEquitiesValue = portfolio.positions.reduce((acc, p) => acc + p.currentValue, 0);
   const totalPortfolioValue = totalEquitiesValue + portfolio.cashBalance + portfolio.liquidBeEsBuffer;
@@ -2870,42 +2886,82 @@ export function App() {
                         <th className="py-2.5 px-3">Scrip</th>
                         <th className="py-2.5 px-3">Entry Date</th>
                         <th className="py-2.5 px-3">Shares</th>
-                        <th className="py-2.5 px-3">Avg Buy Price</th>
+                        <th className="py-2.5 px-3">Avg Buy</th>
                         <th className="py-2.5 px-3">CMP</th>
-                        <th className="py-2.5 px-3">Current Value</th>
                         <th className="py-2.5 px-3">Unrealized P&amp;L</th>
                         <th className="py-2.5 px-3">Stop Loss</th>
-                        <th className="py-2.5 px-3 text-right">Pyramid Tranche</th>
+                        <th className="py-2.5 px-3">Exit Status &amp; Universe Health</th>
+                        <th className="py-2.5 px-3 text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/60 font-medium">
-                      {portfolio.positions.map((pos) => (
-                        <tr key={pos.id} className="hover:bg-slate-800/30">
-                          <td className="py-3 px-3">
-                            <span className="font-bold text-white text-xs">{pos.symbol}</span>
-                            <div className="text-[10px] text-slate-400 truncate max-w-[120px]">{pos.name}</div>
-                          </td>
-                          <td className="py-3 px-3 text-slate-400 font-mono text-[11px]">{pos.entryDate}</td>
-                          <td className="py-3 px-3 text-white font-mono font-bold">{pos.shares}</td>
-                          <td className="py-3 px-3 text-slate-300 font-mono">₹{pos.entryPrice.toLocaleString('en-IN')}</td>
-                          <td className="py-3 px-3 text-white font-mono font-bold">₹{pos.currentPrice.toLocaleString('en-IN')}</td>
-                          <td className="py-3 px-3 text-white font-mono">₹{pos.currentValue.toLocaleString('en-IN')}</td>
-                          <td className="py-3 px-3">
-                            <span className={`font-mono font-bold ${pos.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                              {pos.pnl >= 0 ? `+₹${pos.pnl}` : `-₹${Math.abs(pos.pnl)}`} ({pos.pnlPct}%)
-                            </span>
-                          </td>
-                          <td className="py-3 px-3 text-rose-400 font-mono">₹{pos.stopLoss}</td>
-                          <td className="py-3 px-3 text-right">
-                            <button
-                              onClick={() => executePyramidTranche(pos.id)}
-                              className="px-2.5 py-1 bg-teal-500/15 hover:bg-teal-500/25 text-teal-300 border border-teal-500/30 font-semibold rounded text-[11px] transition-colors"
-                            >
-                              Pyramid +50% Tranche
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
+                      {portfolio.positions.map((pos) => {
+                        const scrip = stockScrips.find((s) => s.symbol === pos.symbol);
+                        const isStopLossTriggered = pos.currentPrice <= pos.stopLoss;
+                        const isTrimTriggered = scrip?.extremeValuationTrimPrice ? pos.currentPrice >= scrip.extremeValuationTrimPrice : false;
+                        const isOffScreener = scrip ? scrip.qualificationTier !== 'Tier 5 Qualified' : false;
+                        const isBelow50Dma = scrip ? !scrip.above50Dma : false;
+
+                        return (
+                          <tr key={pos.id} className="hover:bg-slate-800/30">
+                            <td className="py-3 px-3">
+                              <span className="font-bold text-white text-xs">{pos.symbol}</span>
+                              <div className="text-[10px] text-slate-400 truncate max-w-[120px]">{pos.name}</div>
+                            </td>
+                            <td className="py-3 px-3 text-slate-400 font-mono text-[11px]">{pos.entryDate}</td>
+                            <td className="py-3 px-3 text-white font-mono font-bold">{pos.shares}</td>
+                            <td className="py-3 px-3 text-slate-300 font-mono">₹{pos.entryPrice.toLocaleString('en-IN')}</td>
+                            <td className="py-3 px-3 text-white font-mono font-bold">₹{pos.currentPrice.toLocaleString('en-IN')}</td>
+                            <td className="py-3 px-3">
+                              <span className={`font-mono font-bold ${pos.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                {pos.pnl >= 0 ? `+₹${pos.pnl.toLocaleString('en-IN')}` : `-₹${Math.abs(pos.pnl).toLocaleString('en-IN')}`} ({pos.pnlPct}%)
+                              </span>
+                            </td>
+                            <td className="py-3 px-3 text-rose-400 font-mono">₹{pos.stopLoss}</td>
+                            <td className="py-3 px-3">
+                              {isStopLossTriggered ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40 animate-pulse">
+                                  🔴 Hard Stop Hit (-6.5%) · Exit Now
+                                </span>
+                              ) : isTrimTriggered ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/40">
+                                  🟣 Valuation Extended (+1.5σ) · Trim 50%
+                                </span>
+                              ) : isOffScreener ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                                  🟡 Dropped Off Screener · Trailing Stop Active
+                                </span>
+                              ) : isBelow50Dma ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-orange-500/15 text-orange-300 border border-orange-500/30">
+                                  🟠 Below 50-DMA · Watch Friday Close
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                                  🟢 Screener Qualified · Trend Holding
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3 px-3 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  onClick={() => executePyramidTranche(pos.id)}
+                                  className="px-2 py-1 bg-teal-500/15 hover:bg-teal-500/25 text-teal-300 border border-teal-500/30 font-semibold rounded text-[11px] transition-colors cursor-pointer"
+                                  title="Add +50% pyramid tranche from staging buffer"
+                                >
+                                  Pyramid
+                                </button>
+                                <button
+                                  onClick={() => executeExitPosition(pos.id)}
+                                  className="px-2 py-1 bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 font-semibold rounded text-[11px] transition-colors cursor-pointer"
+                                  title="Liquidate position and return funds to tactical cash"
+                                >
+                                  Exit
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
