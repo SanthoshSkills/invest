@@ -137,32 +137,57 @@ export function BacktestWorkbench({ scenarios, stockScrips = [] }: BacktestWorkb
             </p>
           </div>
 
-          {/* DEDICATED VISUAL TOGGLE / ACTION BUTTON TO SPECIFICALLY ISOLATE MOMENTUM-ONLY */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 self-start lg:self-auto">
-            {/* Primary Isolation Button */}
-            <button
-              onClick={() => {
-                if (isMomentumIsolated) {
-                  setViewMode('comparative');
-                } else {
-                  setViewMode('momentum');
-                }
-              }}
-              className={`px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-2 border shadow-md ${
+          {/* DEDICATED VISUAL TOGGLE SWITCH & 3-WAY SEGMENTED CONTROLLER */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 self-start lg:self-auto">
+            {/* Visual Sliding Switch for Momentum Isolation */}
+            <div
+              onClick={() => setViewMode(isMomentumIsolated ? 'comparative' : 'momentum')}
+              className={`flex items-center gap-2.5 px-3.5 py-2 rounded-2xl border transition-all cursor-pointer select-none shadow-md ${
                 isMomentumIsolated
-                  ? 'bg-cyan-500 hover:bg-cyan-400 text-slate-950 border-cyan-300 shadow-cyan-500/25 ring-2 ring-cyan-400/30'
-                  : 'bg-slate-950 hover:bg-slate-800 text-cyan-400 border-cyan-500/40 hover:border-cyan-400'
+                  ? 'bg-cyan-950/80 border-cyan-400/80 shadow-cyan-500/20 ring-2 ring-cyan-400/30'
+                  : 'bg-slate-950/90 border-slate-800 hover:border-slate-700'
               }`}
+              title="Click to toggle Momentum-Only backtest isolation"
             >
-              <Zap className={`h-4 w-4 ${isMomentumIsolated ? 'text-slate-950 fill-slate-950' : 'text-cyan-400'}`} />
-              <span>{isMomentumIsolated ? '⚡ Isolate Momentum: ACTIVE' : '⚡ Isolate Momentum-Only Backtest'}</span>
-            </button>
+              <Zap className={`h-4 w-4 ${isMomentumIsolated ? 'text-cyan-400 animate-pulse fill-cyan-400' : 'text-slate-400'}`} />
+              <div className="flex flex-col text-left">
+                <span className="text-[11px] font-black text-white leading-tight">Isolate Momentum</span>
+                <span className={`text-[9px] font-mono font-bold leading-tight ${isMomentumIsolated ? 'text-cyan-300' : 'text-slate-400'}`}>
+                  {isMomentumIsolated ? 'ISOLATION: ON' : 'ISOLATION: OFF'}
+                </span>
+              </div>
+
+              {/* Physical Sliding Toggle Pill */}
+              <div
+                className={`relative inline-flex h-6 w-12 shrink-0 rounded-full border-2 transition-colors duration-200 ease-in-out ml-1 ${
+                  isMomentumIsolated ? 'bg-cyan-500 border-cyan-300 shadow-inner' : 'bg-slate-800 border-slate-700'
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-slate-950 shadow-md ring-0 transition duration-200 ease-in-out mt-0.5 ${
+                    isMomentumIsolated ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </div>
+            </div>
 
             {/* Quick 3-Way Mode Controller */}
             <div className="flex items-center gap-1 bg-slate-950/80 p-1 rounded-xl border border-slate-800">
               <button
+                onClick={() => setViewMode('momentum')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  viewMode === 'momentum'
+                    ? 'bg-cyan-500 text-slate-950 font-black shadow-md'
+                    : 'text-cyan-400 hover:text-cyan-300 hover:bg-slate-900'
+                }`}
+                title="Isolate Pure Momentum strategy"
+              >
+                <Zap className="h-3.5 w-3.5" />
+                <span>Momentum</span>
+              </button>
+              <button
                 onClick={() => setViewMode('comparative')}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   viewMode === 'comparative'
                     ? 'bg-slate-800 text-white shadow-sm'
                     : 'text-slate-400 hover:text-white'
@@ -173,7 +198,7 @@ export function BacktestWorkbench({ scenarios, stockScrips = [] }: BacktestWorkb
               </button>
               <button
                 onClick={() => setViewMode('valmo')}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   viewMode === 'valmo'
                     ? 'bg-emerald-500 text-slate-950 shadow-sm font-black'
                     : 'text-slate-400 hover:text-white'
@@ -185,6 +210,30 @@ export function BacktestWorkbench({ scenarios, stockScrips = [] }: BacktestWorkb
             </div>
           </div>
         </div>
+
+        {/* High-Visibility Active Isolation Banner */}
+        {isMomentumIsolated && (
+          <div className="mt-4 p-3.5 rounded-xl bg-cyan-950/60 border border-cyan-400/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs animate-in fade-in duration-200 shadow-lg shadow-cyan-950/40">
+            <div className="flex items-start sm:items-center gap-2.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-ping shrink-0 mt-1 sm:mt-0" />
+              <div>
+                <span className="font-black text-cyan-300 flex items-center gap-1.5">
+                  <Zap className="h-3.5 w-3.5 fill-cyan-400" />
+                  MOMENTUM-ONLY BACKTEST ISOLATED
+                </span>
+                <span className="text-slate-300 text-[11px] block sm:inline sm:ml-2">
+                  Running against the terminal's active 8 MTF Leading Indicators (4 Daily Triggers + 4 Weekly Macro Bias) with Friday 15:30 IST close execution.
+                </span>
+              </div>
+            </div>
+            <button
+              onClick={() => setViewMode('comparative')}
+              className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-200 hover:text-white border border-slate-700 text-[11px] font-bold shrink-0 transition-colors cursor-pointer"
+            >
+              Exit Isolation (Show 3-Way)
+            </button>
+          </div>
+        )}
 
         {/* 3 Strategy Cumulative Highlights Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
@@ -511,11 +560,27 @@ export function BacktestWorkbench({ scenarios, stockScrips = [] }: BacktestWorkb
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-400">Pure Momentum Alpha:</span>
-            <span className="text-sm font-black text-cyan-400 bg-cyan-500/10 px-3 py-1 rounded-lg border border-cyan-500/20 font-mono">
-              {activeScenario.pureMomentum.alphaPct}
-            </span>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-400">Momentum Alpha:</span>
+              <span className="text-sm font-black text-cyan-400 bg-cyan-500/10 px-2.5 py-1 rounded-lg border border-cyan-500/20 font-mono">
+                {activeScenario.pureMomentum.alphaPct}
+              </span>
+            </div>
+
+            {/* Quick Contextual Isolation Toggle */}
+            <button
+              onClick={() => setViewMode(isMomentumIsolated ? 'comparative' : 'momentum')}
+              className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border shadow-sm ${
+                isMomentumIsolated
+                  ? 'bg-cyan-500 text-slate-950 border-cyan-300 font-black shadow-cyan-500/20'
+                  : 'bg-slate-950 hover:bg-slate-800 text-cyan-400 border-cyan-500/40 hover:border-cyan-300'
+              }`}
+              title="Toggle Pure Momentum isolation on/off"
+            >
+              <Zap className={`h-3.5 w-3.5 ${isMomentumIsolated ? 'fill-slate-950 text-slate-950' : 'text-cyan-400'}`} />
+              <span>{isMomentumIsolated ? '⚡ Momentum Isolated (ON)' : '⚡ Isolate Momentum'}</span>
+            </button>
           </div>
         </div>
 
