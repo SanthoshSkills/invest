@@ -464,6 +464,42 @@ export function UserManualView({
                 </div>
               </div>
             </div>
+
+            {/* Pure Momentum MTF Strategy & Weekly Close Execution Cadence */}
+            <div className="p-5 bg-gradient-to-r from-cyan-950/40 to-slate-900/60 rounded-xl border border-cyan-500/30 text-xs space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="font-bold text-cyan-400 text-sm flex items-center gap-2">
+                  <Zap className="h-4 w-4" />
+                  Pure Momentum MTF Strategy (Weekly Close Investment Rule)
+                </div>
+                <span className="text-[10px] font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 px-2 py-0.5 rounded self-start sm:self-auto">
+                  Cadence: Friday 15:30 IST Close Only
+                </span>
+              </div>
+              <p className="text-slate-200 leading-relaxed">
+                While continuous screening tracks the 4 Daily Leading Indicators and 4 Weekly Macro Bias signals throughout the week for monitoring, <strong>actual capital investment occurs strictly at the Friday week close</strong>. Capital is allocated only when a scrip simultaneously satisfies both daily execution triggers and weekly structural trend confirmation on the closing day. This eliminates false intra-week whipsaw breakouts.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 text-[11px]">
+                <div className="p-3 bg-slate-900/90 rounded-lg border border-slate-800 space-y-1">
+                  <strong className="text-cyan-300 block">4 Daily Triggers (Evaluated on Friday Close)</strong>
+                  <ul className="text-slate-300 space-y-0.5 list-disc pl-4 text-[10px]">
+                    <li>Triple EMA Cross &amp; Price Alignment (Price &gt; EMA9 &gt; EMA21 &gt; EMA55)</li>
+                    <li>ADX Trend Acceleration (ADX &gt; 20 with +DI &gt; -DI)</li>
+                    <li>Volume Expansion (&gt;20-DMA) OR RSI Sweet Spot (45–65)</li>
+                    <li>Volatility Expansion (14-day ATR or Bollinger Band)</li>
+                  </ul>
+                </div>
+                <div className="p-3 bg-slate-900/90 rounded-lg border border-slate-800 space-y-1">
+                  <strong className="text-teal-300 block">4 Weekly Bias Signals (Macro Trend Alignment)</strong>
+                  <ul className="text-slate-300 space-y-0.5 list-disc pl-4 text-[10px]">
+                    <li>Triple EMA Band Structure (Price structurally above 13 &gt; 34 &gt; 89 EMA)</li>
+                    <li>ADX Macro Strength (&gt; 30 and rising)</li>
+                    <li>Volume Accumulation on up-weeks OR Bullish RSI Divergence</li>
+                    <li>Multi-Timeframe Synchronization (Daily triggers align with Weekly trend)</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

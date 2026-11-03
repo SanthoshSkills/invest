@@ -40,6 +40,7 @@ import {
   Play,
   HelpCircle,
   PlusCircle,
+  Clock,
 } from 'lucide-react';
 import {
   REGIMES_DATA,
@@ -1901,10 +1902,9 @@ export function App() {
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-3 text-[11px] text-slate-400">
-                    <span className="flex items-center gap-1.5 text-emerald-400 font-mono">
-                      <CheckCircle2 className="h-3.5 w-3.5" /> Triple EMA Cross • ADX &gt; 20 • Vol/RSI Room • Volatility
-                    </span>
+                  <div className="flex items-center gap-2 text-[11px] text-cyan-300 bg-cyan-950/40 border border-cyan-500/30 px-2.5 py-1 rounded-lg">
+                    <Clock className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
+                    <span><strong>Weekly Close Cadence:</strong> Capital allocated only on Friday close when Daily &amp; Weekly MTF both pass</span>
                   </div>
                 </div>
               )}
@@ -2142,15 +2142,23 @@ export function App() {
                                   />
                                 </td>
 
-                                {/* MTF Alignment */}
+                                {/* MTF Alignment & Weekly Close Cadence */}
                                 <td className="py-3 px-3">
                                   <span className={`inline-flex items-center gap-1 text-[11px] font-bold ${
                                     mtf?.weekly.mtfSynchronized ? 'text-emerald-400' : 'text-amber-400'
                                   }`}>
                                     {mtf?.weekly.mtfSynchronized ? 'MTF Synchronized' : 'Desynchronized'}
                                   </span>
-                                  <div className="text-[10px] text-slate-400">
-                                    {stock.above50Dma ? 'Price > 50-DMA' : 'Below 50-DMA'}
+                                  <div className="mt-1">
+                                    {mtf?.isWeeklyCloseQualified ? (
+                                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono font-bold border border-emerald-500/30">
+                                        ✓ Friday Close Ready
+                                      </span>
+                                    ) : (
+                                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-mono">
+                                        Pending Friday Close
+                                      </span>
+                                    )}
                                   </div>
                                 </td>
 
@@ -2909,7 +2917,7 @@ export function App() {
         {/* ROUTE 4: STRATEGY BACKTESTER */}
         {activeTab === 'backtest' && (
           <div className="animate-fade-in">
-            <BacktestWorkbench scenarios={BACKTEST_SCENARIOS} />
+            <BacktestWorkbench scenarios={BACKTEST_SCENARIOS} stockScrips={stockScrips} />
           </div>
         )}
 

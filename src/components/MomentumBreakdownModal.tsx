@@ -12,7 +12,7 @@ import {
   ArrowUpRight,
   BarChart2,
 } from 'lucide-react';
-import { StockScrip } from '../types/strategy';
+import { StockScrip, ScripMomentumProfile } from '../types/strategy';
 import { computeScripMomentum, buildUniverseMomentumProfiles } from '../utils/momentumIndicators';
 
 interface MomentumBreakdownModalProps {
@@ -29,12 +29,15 @@ export function MomentumBreakdownModal({
   if (!stock) return null;
 
   const profileMap = buildUniverseMomentumProfiles(allStocks.length > 0 ? allStocks : [stock]);
-  const profile = profileMap.get(stock.symbol) || {
-    ...computeScripMomentum(stock),
+  const defaultMomentum = computeScripMomentum(stock);
+  const profile: ScripMomentumProfile = profileMap.get(stock.symbol) || {
+    ...defaultMomentum,
     rankOverall: 1,
     rankInSector: 1,
     isTop15Overall: true,
     isTop5InSector: true,
+    isWeeklyCloseQualified: defaultMomentum.isWeeklyCloseQualified,
+    weeklyCloseStatus: defaultMomentum.weeklyCloseStatus,
   };
 
   const { daily, weekly, pureMomentumScore, totalIndicatorCount, isMtfSynced } = profile;
@@ -96,6 +99,30 @@ export function MomentumBreakdownModal({
                 Rank #{profile.rankInSector} in Segment {profile.isTop5InSector ? '★ Top 5' : ''}
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* Weekly Close Investment Cadence Banner */}
+        <div className="my-4 p-3.5 rounded-xl bg-slate-950/80 border border-cyan-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="space-y-0.5">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+              <span className="text-xs font-bold text-white uppercase tracking-wider">Weekly-Close Investment Cadence:</span>
+              <span className={`text-[10px] px-2 py-0.5 rounded font-mono font-bold ${
+                profile.isWeeklyCloseQualified
+                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                  : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+              }`}>
+                {profile.isWeeklyCloseQualified ? 'QUALIFIED FOR WEEKLY CLOSE (Friday 15:30 IST)' : 'PENDING FRIDAY CLOSE CONFIRMATION'}
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              While daily and weekly screening runs continuously for situational tracking, fresh investment occurs <strong>only on Friday weekly close</strong> when both daily execution criteria and weekly macro criteria are satisfied simultaneously.
+            </p>
+          </div>
+          <div className="text-right shrink-0">
+            <span className="text-[10px] text-slate-400 block">Execution Rule</span>
+            <span className="text-xs font-mono font-bold text-cyan-400">Friday EOD Close Only</span>
           </div>
         </div>
 

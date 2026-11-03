@@ -156,6 +156,8 @@ export interface ScripMomentumProfile {
   pureMomentumScore: number; // 0 to 100
   totalIndicatorCount: number; // 0 to 8
   isMtfSynced: boolean;
+  isWeeklyCloseQualified: boolean; // Both daily & weekly criteria met on weekly closing day (Friday)
+  weeklyCloseStatus: 'Weekly Close Qualified' | 'Watchlist - Pending EOW' | 'Not Qualified';
   rankOverall: number;
   rankInSector: number;
   isTop15Overall: boolean;
@@ -185,7 +187,7 @@ export interface BacktestTradeLog {
   symbol: string;
   name: string;
   strategy: 'Pure Momentum' | 'Val-Mo';
-  entryDate: string;
+  entryDate: string; // Weekly Close date (Friday EOD)
   entryPrice: number;
   exitDate: string;
   exitPrice: number;
@@ -194,12 +196,14 @@ export interface BacktestTradeLog {
   entryTrigger: string;
   exitTrigger: string;
   pyramided: boolean;
+  executionTiming?: 'Weekly Close (Friday EOD)' | 'Mid-Week Breaker';
 }
 
 export interface ComprehensiveBacktestScenario {
   period: string;
   regime: string;
   description: string;
+  executionCadence?: string; // e.g. "Weekly Close (Friday 15:30 IST)"
   pureMomentum: StrategyPerformanceMetrics;
   valMo: StrategyPerformanceMetrics;
   nifty500: {

@@ -22,6 +22,8 @@ export function computeScripMomentum(stock: StockScrip): {
   pureMomentumScore: number;
   totalIndicatorCount: number;
   isMtfSynced: boolean;
+  isWeeklyCloseQualified: boolean;
+  weeklyCloseStatus: 'Weekly Close Qualified' | 'Watchlist - Pending EOW' | 'Not Qualified';
 } {
   const price = stock.price || 1;
   const isAscendingTrend = stock.above50Dma && stock.dma50Slope === 'Ascending';
@@ -164,6 +166,16 @@ export function computeScripMomentum(stock: StockScrip): {
 
   const totalIndicatorCount = dailyPassedCount + weeklyPassedCount; // out of 8
 
+  // Weekly Close Investment Rule:
+  // "While there is daily and weekly screening, the investment is going to be only weekly based on the week close meeting both daily criteria and weekly criteria on closing day."
+  const isWeeklyCloseQualified = dailyPassedCount >= 3 && weeklyPassedCount >= 3 && mtfSynchronized;
+  const weeklyCloseStatus: 'Weekly Close Qualified' | 'Watchlist - Pending EOW' | 'Not Qualified' =
+    isWeeklyCloseQualified
+      ? 'Weekly Close Qualified'
+      : totalIndicatorCount >= 4
+      ? 'Watchlist - Pending EOW'
+      : 'Not Qualified';
+
   // Pure Momentum Score (0-100 scale)
   const baseScore = Math.round((totalIndicatorCount / 8) * 85);
   const rsBonus = Math.max(0, Math.min(15, Math.round(rsVal * 1.8)));
@@ -175,6 +187,8 @@ export function computeScripMomentum(stock: StockScrip): {
     pureMomentumScore,
     totalIndicatorCount,
     isMtfSynced: mtfSynchronized,
+    isWeeklyCloseQualified,
+    weeklyCloseStatus,
   };
 }
 
@@ -239,6 +253,8 @@ export function buildUniverseMomentumProfiles(scrips: StockScrip[]): Map<string,
       pureMomentumScore: p.pureMomentumScore,
       totalIndicatorCount: p.totalIndicatorCount,
       isMtfSynced: p.isMtfSynced,
+      isWeeklyCloseQualified: p.isWeeklyCloseQualified,
+      weeklyCloseStatus: p.weeklyCloseStatus,
       rankOverall,
       rankInSector,
       isTop15Overall: rankOverall <= 15,
