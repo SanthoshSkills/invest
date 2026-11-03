@@ -111,3 +111,101 @@ export interface PaperPosition {
   estimatedStcgTax: number;
   estimatedDpFees: number;
 }
+
+export interface DailyLeadingIndicators {
+  tripleEmaAlignment: 'Bullish' | 'Neutral' | 'Bearish';
+  ema9: number;
+  ema21: number;
+  ema55: number;
+  priceAboveFastEma: boolean;
+  shortAboveLongEma: boolean;
+  adx: number;
+  plusDi: number;
+  minusDi: number;
+  adxAccelerating: boolean; // ADX > 20/25 with +DI > -DI
+  volumeAbove20Dma: boolean;
+  volume20DmaRatio: number;
+  dailyRsi: number;
+  rsiMomentumRoom: boolean; // 45 <= RSI <= 65
+  atr14: number;
+  atrExpansion: boolean;
+  bollingerExpansion: boolean;
+  passedCount: number; // 0 to 4
+  statusLabel: string;
+}
+
+export interface WeeklyLeadingIndicators {
+  weeklyTripleEmaStructure: 'Bullish Support' | 'Consolidating' | 'Breakdown';
+  weeklyEma13: number;
+  weeklyEma34: number;
+  weeklyEma89: number;
+  supportedByEmaBands: boolean;
+  weeklyAdx: number;
+  weeklyAdxRising: boolean; // sustained > 30 and rising
+  volumeAccumulation: boolean;
+  weeklyRsi: number;
+  rsiDivergence: 'Bullish Divergence' | 'None' | 'Bearish Divergence';
+  mtfSynchronized: boolean; // Daily triggers align with Weekly Triple EMA status
+  passedCount: number; // 0 to 4
+  statusLabel: string;
+}
+
+export interface ScripMomentumProfile {
+  daily: DailyLeadingIndicators;
+  weekly: WeeklyLeadingIndicators;
+  pureMomentumScore: number; // 0 to 100
+  totalIndicatorCount: number; // 0 to 8
+  isMtfSynced: boolean;
+  rankOverall: number;
+  rankInSector: number;
+  isTop15Overall: boolean;
+  isTop5InSector: boolean;
+}
+
+export interface StrategyPerformanceMetrics {
+  totalReturnPct: string;
+  alphaPct: string;
+  maxDrawdownPct: string;
+  winRatePct: string;
+  profitFactor: string;
+  sharpeRatio: string;
+  avgTradeDuration: string;
+  stcgTaxDragPct: string;
+}
+
+export interface EquityCurvePoint {
+  periodLabel: string;
+  nifty: number; // base 100
+  valMo: number; // base 100
+  momentum: number; // base 100
+}
+
+export interface BacktestTradeLog {
+  id: string;
+  symbol: string;
+  name: string;
+  strategy: 'Pure Momentum' | 'Val-Mo';
+  entryDate: string;
+  entryPrice: number;
+  exitDate: string;
+  exitPrice: number;
+  returnPct: number;
+  holdingDays: number;
+  entryTrigger: string;
+  exitTrigger: string;
+  pyramided: boolean;
+}
+
+export interface ComprehensiveBacktestScenario {
+  period: string;
+  regime: string;
+  description: string;
+  pureMomentum: StrategyPerformanceMetrics;
+  valMo: StrategyPerformanceMetrics;
+  nifty500: {
+    totalReturnPct: string;
+    maxDrawdownPct: string;
+  };
+  equityCurve: EquityCurvePoint[];
+  tradeLogs: BacktestTradeLog[];
+}

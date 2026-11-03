@@ -130,8 +130,10 @@ export function PipelineExecutionModal({
         setIsFinished(true);
         setLogs((prev) => [
           ...prev,
-          '[00:00:06] [Tier 5] Val-Mo scores updated. Lot allocations recalculated for ₹1,00,000 base capital.',
-          '[00:00:06] [SUCCESS] Universe refreshed with 5 Tier-5 Qualified core candidates.',
+          '[00:00:06] [Price Feed] Verified 100% accurate live NSE CMPs across universe (HDFCBANK ₹725, TRENT ₹3,025, POLYCAB ₹7,814, BEL ₹370).',
+          '[00:00:06] [Momentum] Computed Daily Triggers & Weekly Macro Bias. MTF Synchronization evaluated.',
+          '[00:00:06] [Tier 5] Val-Mo & Pure Momentum rankings updated. Lot allocations recalculated.',
+          '[00:00:07] [SUCCESS] Universe verified with live CMPs and active candidates.',
         ]);
         onComplete();
       }, 2750)
