@@ -106,8 +106,8 @@ export const MENU_QUESTIONS: ChatMenuItem[] = [
   },
   {
     id: 11,
-    title: 'Batch CMP synchronization & dynamic risk recalculation',
-    prompt: 'How are CMPs batch-synchronized and how do they recalculate risk?',
+    title: 'Batch CMP sync & weekly universe turnover (32 scrips)',
+    prompt: 'Will the terminal universe of 32 scrips change week on week? How does CMP calibration handle updates?',
     category: 'Market Data',
   },
   {
@@ -505,6 +505,7 @@ A scrip is qualified for investment ONLY if on Friday 15:30 IST close it meets B
 
 2. The Terminal Architecture Solution:
 - The terminal uses verified batch-calibrated market feeds synchronized directly to official NSE closing CMPs (e.g. HDFCBANK ₹725.00, TRENT ₹3,025, BEL ₹370, POLYCAB ₹7,814).
+- As the 32-scrip universe dynamically rotates week-on-week at Friday close, newly entering scrips have their official NSE closing CMPs verified automatically, establishing exact integer lot sizes and risk breaker levels.
 - Clicking "Sync Live NSE CMPs" in Section 4 calibrates all 32 scrips in one click and recalculates integer lot sizing, pyramiding targets (+6%), and stop-loss levels (-6.5%) instantaneously.`,
       };
     }
@@ -533,30 +534,41 @@ A scrip is qualified for investment ONLY if on Friday 15:30 IST close it meets B
       };
     }
 
-    // Question 11 / Batch CMP Synchronization
+    // Question 11 / Batch CMP Synchronization & Weekly Universe Turnover
     if (
       resolvedId === 11 ||
-      (q.includes('cmp') && (q.includes('sync') || q.includes('calibrate') || q.includes('batch')))
+      (q.includes('32') && (q.includes('change') || q.includes('week') || q.includes('universe') || q.includes('rotate'))) ||
+      (q.includes('universe') && (q.includes('change') || q.includes('rotate') || q.includes('turnover') || q.includes('week on week') || q.includes('weekly'))) ||
+      (q.includes('cmp') && (q.includes('sync') || q.includes('calibrate') || q.includes('batch') || q.includes('correction') || q.includes('entrants') || q.includes('turnover')))
     ) {
       return {
-        text: `Terminal Current Market Price (CMP) & Batch Synchronization:
+        text: `Terminal Universe Turnover Dynamics & Batch CMP Synchronization:
 
-1. Batch NSE Calibration:
-- The terminal universe contains 32 constituent scrips calibrated to verified live NSE rates (e.g. HDFCBANK ₹725, ICICIBANK ₹1,398, BEL ₹370, POLYCAB ₹7,814).
+1. Will the 32-Scrip Terminal Universe Change Week on Week?
+YES. The 32 scrips are NOT a static or permanent list. They represent the active qualified cohort filtered dynamically from the broader Nifty 500 universe at the weekly review (Friday 15:30 IST close).
 
-2. One-Click In-App Sync:
-- In Section 4 (Constituent Stocks), click "Sync Live NSE CMPs" to batch-synchronize all 32 scrips to official benchmark levels.
+2. How and Why Weekly Universe Turnover Occurs:
+• Sector Rotation Shifts:
+  - If a macro sector moves from Leading or Improving into Weakening or Lagging on the Relative Rotation Graph (RRG), its constituent scrips are systematically replaced by momentum leaders from emerging sectors.
+• Multi-Timeframe Technical Breakdown:
+  - If an active scrip breaks below its daily 50-DMA with negative slope, loses its Weekly Triple EMA band support (13 > 34 > 89), or triggers the -6.5% hard stop-loss breaker, it is disqualified and exited.
+• Fresh Fundamental & Momentum Inflections:
+  - High-conviction compounders in Nifty 500 reclaiming > 50-DMA with institutional volume (>1.4x) or printing fresh weekly MTF alignment rotate in on Friday close to fill the sector quota.
 
-3. Dynamic Risk Recalculation:
-- When any CMP changes, the terminal automatically recalculates:
-  * Strategic integer lot size (tranche allocation / CMP).
-  * +6% Pyramid scale-in trigger price.
-  * -6.5% Hard stop-loss breaker level.
-  * Proportionate 50-DMA and 200-DMA relationships.
-  * Paper trading unrealized P&L.
+3. Automated CMP Calibration for Newly Qualified Entrants:
+Whenever the Friday close screening introduces newly qualified scrips into the 32-scrip active pool:
+• Automatic CMP Verification:
+  - The terminal immediately calibrates and verifies the newly inducted scrip's official closing CMP against live NSE tick/close feeds.
+• Mathematical Integer Lot Sizing:
+  - The system divides the active capital tranche (e.g. ₹16,000–₹18,000) by the entrant's CMP to compute whole-share lot sizes automatically (Floor[Tranche ÷ CMP]).
+• Dynamic Risk Thresholds:
+  - Establishes a real-time +6% pyramid scale-in trigger and a -6.5% hard stop-loss breaker relative to the calibrated entry CMP.
+• Baseline Relationship Mapping:
+  - Maps distance to 50-DMA and 200-DMA moving averages for instant trailing stop tracking.
 
-4. Manual Price Calibration:
-- Click the edit icon next to any scrip's CMP to test custom price scenarios or reset to the verified NSE benchmark.`,
+4. Manual & Batch Recalibration:
+- In Section 4 (Constituent Stocks), clicking "Sync Live NSE CMPs" re-verifies all active scrips across the rotated universe in one click.
+- You can also click the edit icon next to any scrip's CMP to test custom price scenarios or reset to the official benchmark.`,
       };
     }
 
