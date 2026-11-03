@@ -854,11 +854,15 @@ This guarantees that each position receives an equal, risk-calibrated allocation
   - When a compounder runs to statistical extremes (+1.5σ above 5-year median P/E or Weekly RSI > 70–75), trim 50% of the position to secure principal and lock in gains.
   - Trail the remaining 50% "runner" position along the rising 50-DMA or weekly EMA-13 until a structural breakdown occurs.
 
-3. Live Tracking in the Terminal UI:
-- Open Section 5 (Active Positions) to see live health pills:
-  * 🟢 Screener Qualified · Trend Holding
-  * 🟡 Dropped Off Screener · Trailing Stop Active (Stop: ₹Level)
-  * 🔴 Hard Stop Hit (-6.5%) · Exit Now (with 1-click Exit button).`,
+3. Live Tracking & Notification in the Terminal UI:
+- Open Section 5 (Active Positions) to see the Notification Alert Center:
+  * ⚠️ Alert Banner: Highlights positions that dropped from the 32-screener or failed MTF indicators with exact failure diagnostics.
+  * Filter Toggle: Click "Filter Flagged Only" to isolate alerted holdings in one click.
+  * Live Table Badges: Each holding displays amber left-border highlights and status pills:
+    • 🟢 Screener Qualified · MTF Verified (8/8)
+    • 🟡 Dropped Off 32-Universe · Trailing Stop Active (Stop: ₹Level)
+    • 🟠 Failed Momentum Criteria · Watch Friday Close
+    • 🔴 Hard Stop Hit (-6.5%) · Action: Liquidate Now.`,
       };
     }
 

@@ -1635,6 +1635,24 @@ export const INITIAL_PAPER_PORTFOLIO: {
       estimatedStcgTax: 115,
       estimatedDpFees: 15.93,
     },
+    {
+      id: 'p4',
+      symbol: 'HDFCBANK',
+      name: 'HDFC Bank Ltd.',
+      entryDate: '2026-10-22',
+      entryPrice: 718,
+      currentPrice: 725, // Verified live NSE market price
+      shares: 24,
+      investedAmount: 17232,
+      currentValue: 17400,
+      pnl: 168,
+      pnlPct: 0.97,
+      stopLoss: 678,
+      pyramidLevel: 1,
+      trimTarget: 978,
+      estimatedStcgTax: 34,
+      estimatedDpFees: 15.93,
+    },
   ],
 };
 

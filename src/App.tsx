@@ -6,6 +6,8 @@ import {
   BookOpen,
   Sliders,
   AlertCircle,
+  AlertTriangle,
+  Bell,
   TrendingUp,
   FileText,
   PieChart,
@@ -851,6 +853,80 @@ export function App() {
   const overallReturnPct = totalInvested > 0 ? Number(((totalPnl / totalInvested) * 100).toFixed(2)) : 0;
   const totalEstimatedStcg = portfolio.positions.reduce((acc, p) => acc + (p.pnl > 0 ? p.pnl * 0.2 : 0), 0);
   const totalDpDrag = portfolio.positions.length * 15.93;
+
+  // Paper Trading Position Health & Criteria Notification State
+  const [paperFilterAlertOnly, setPaperFilterAlertOnly] = useState<boolean>(false);
+  const [isAlertBannerExpanded, setIsAlertBannerExpanded] = useState<boolean>(true);
+
+  // Position Health & Criteria Analysis (Identifies Universe Drop-Offs & Momentum Criteria Failures)
+  const positionsHealthAnalysis = useMemo(() => {
+    return portfolio.positions.map((pos) => {
+      const scrip = stockScrips.find((s) => s.symbol === pos.symbol);
+      const profile = universeMomentumProfiles.get(pos.symbol);
+
+      // Criteria 1: Dropped below the 32-universe
+      // Scrips in the 32 qualified universe must be 'Tier 5 Qualified' and not in Lagging sectors
+      const isDroppedFrom32 = !scrip || scrip.qualificationTier !== 'Tier 5 Qualified';
+
+      // Criteria 2: Failed momentum indicator criteria
+      const failedReasons: string[] = [];
+      if (isDroppedFrom32) {
+        failedReasons.push(`Dropped from Top 32 Screener (${scrip?.qualificationTier || 'Unlisted'})`);
+      }
+      if (scrip && !scrip.above50Dma) {
+        failedReasons.push(`Price closed below Daily 50-DMA (₹${scrip.dma50})`);
+      }
+      if (profile && !profile.weekly.supportedByEmaBands) {
+        failedReasons.push('Weekly Triple EMA Bands (13>34>89) support broken');
+      }
+      if (profile && profile.daily.tripleEmaAlignment === 'Bearish') {
+        failedReasons.push('Daily Triple EMA alignment is Bearish');
+      }
+      if (profile && !profile.isMtfSynced) {
+        failedReasons.push('Daily triggers conflict with Weekly Macro Trend (Desynchronized)');
+      }
+      if (profile && !profile.isWeeklyCloseQualified) {
+        failedReasons.push('Pending Friday 15:30 IST Weekly-Close confirmation');
+      }
+      if (profile && profile.totalIndicatorCount < 5) {
+        failedReasons.push(`Weak Momentum Profile (${profile.totalIndicatorCount}/8 MTF indicators passed)`);
+      }
+
+      const isFailedMomentum =
+        !profile ||
+        profile.totalIndicatorCount < 5 ||
+        !profile.isWeeklyCloseQualified ||
+        !profile.isMtfSynced ||
+        !profile.weekly.supportedByEmaBands ||
+        (scrip ? !scrip.above50Dma : false);
+
+      const isStopLossTriggered = pos.currentPrice <= pos.stopLoss;
+      const isTrimTriggered = scrip?.extremeValuationTrimPrice ? pos.currentPrice >= scrip.extremeValuationTrimPrice : false;
+      const isFlagged = isDroppedFrom32 || isFailedMomentum || isStopLossTriggered;
+
+      return {
+        pos,
+        scrip,
+        profile,
+        isDroppedFrom32,
+        isFailedMomentum,
+        isStopLossTriggered,
+        isTrimTriggered,
+        isFlagged,
+        failedReasons,
+        passedIndicatorCount: profile?.totalIndicatorCount || 0,
+      };
+    });
+  }, [portfolio.positions, stockScrips, universeMomentumProfiles]);
+
+  const flaggedPositionsCount = useMemo(() => {
+    return positionsHealthAnalysis.filter((p) => p.isFlagged).length;
+  }, [positionsHealthAnalysis]);
+
+  const displayedPositions = useMemo(() => {
+    if (!paperFilterAlertOnly) return positionsHealthAnalysis;
+    return positionsHealthAnalysis.filter((p) => p.isFlagged);
+  }, [positionsHealthAnalysis, paperFilterAlertOnly]);
 
   const copyToClipboard = (filename: string, content: string) => {
     navigator.clipboard.writeText(content);
@@ -2862,21 +2938,177 @@ export function App() {
               </div>
             </div>
 
-            {/* Active Virtual Positions Table */}
-            <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 shadow-lg">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-bold uppercase tracking-wider text-white flex items-center gap-2">
-                  <Briefcase className="h-4 w-4 text-emerald-400" />
-                  Active Theoretical Positions ({portfolio.positions.length})
-                </h3>
-                <span className="text-xs text-slate-400">
-                  Target Concentration: 5 to 7 stocks capped
+            {/* Portfolio Universe & Momentum Health Notification Center */}
+            {flaggedPositionsCount > 0 ? (
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-950/60 via-slate-900 to-amber-950/40 border border-amber-500/50 shadow-xl space-y-3 animate-in fade-in duration-200">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <span className="p-2 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/40 shrink-0">
+                      <AlertTriangle className="h-5 w-5 animate-pulse" />
+                    </span>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-xs font-black uppercase tracking-wider text-amber-300">
+                          Portfolio Position Health Alert: {flaggedPositionsCount} Holding{flaggedPositionsCount > 1 ? 's' : ''} Flagged
+                        </h4>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono font-bold">
+                          Review Required
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-300 mt-0.5">
+                        These positions have dropped below the active 32-scrip screening universe or failed multi-timeframe momentum criteria.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => setPaperFilterAlertOnly(!paperFilterAlertOnly)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border shadow-sm ${
+                        paperFilterAlertOnly
+                          ? 'bg-amber-500 text-slate-950 border-amber-300 font-black'
+                          : 'bg-slate-950 hover:bg-slate-800 text-amber-300 border-amber-500/40'
+                      }`}
+                    >
+                      <Filter className="h-3 w-3" />
+                      <span>{paperFilterAlertOnly ? 'Show All Positions' : `Filter Flagged Only (${flaggedPositionsCount})`}</span>
+                    </button>
+                    <button
+                      onClick={() => setIsAlertBannerExpanded(!isAlertBannerExpanded)}
+                      className="p-1.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                      title={isAlertBannerExpanded ? 'Collapse Alert Details' : 'Expand Alert Details'}
+                    >
+                      {isAlertBannerExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {isAlertBannerExpanded && (
+                  <div className="space-y-3 pt-3 border-t border-amber-500/20 text-xs">
+                    {/* Flagged Positions Cards Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                      {positionsHealthAnalysis
+                        .filter((p) => p.isFlagged)
+                        .map(({ pos, scrip, profile, failedReasons, isStopLossTriggered, passedIndicatorCount }) => (
+                          <div
+                            key={pos.id}
+                            className={`p-3 rounded-xl border flex flex-col justify-between gap-2 transition-all ${
+                              isStopLossTriggered
+                                ? 'bg-rose-950/40 border-rose-500/60 shadow-rose-950/20 shadow-md'
+                                : 'bg-slate-950/80 border-amber-500/40 shadow-sm'
+                            }`}
+                          >
+                            <div>
+                              <div className="flex items-center justify-between mb-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold text-white text-xs">{pos.symbol}</span>
+                                  <span className="text-[10px] text-slate-400">({pos.name})</span>
+                                  <span className="text-[9px] px-1.5 py-0.2 rounded font-mono font-bold bg-slate-800 text-slate-300">
+                                    MTF: {passedIndicatorCount}/8 Passed
+                                  </span>
+                                </div>
+                                <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${
+                                  pos.pnl >= 0 ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'
+                                }`}>
+                                  {pos.pnl >= 0 ? `+₹${pos.pnl}` : `-₹${Math.abs(pos.pnl)}`} ({pos.pnlPct}%)
+                                </span>
+                              </div>
+
+                              <div className="flex flex-wrap gap-1 mt-1.5">
+                                {failedReasons.map((r, i) => (
+                                  <span
+                                    key={i}
+                                    className="text-[9px] px-2 py-0.5 rounded bg-amber-500/15 border border-amber-500/30 text-amber-200 font-medium"
+                                  >
+                                    ⚠️ {r}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-between pt-2 border-t border-slate-800/80 text-[10px]">
+                              <span className="text-slate-400 font-mono">
+                                Trailing Stop-Loss: <strong className="text-rose-400">₹{pos.stopLoss}</strong> (Protection Active)
+                              </span>
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  onClick={() => scrip && setInspectedScrip(scrip)}
+                                  className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-semibold rounded text-[10px] transition-colors cursor-pointer"
+                                >
+                                  Audit Scrip
+                                </button>
+                                <button
+                                  onClick={() => executeExitPosition(pos.id)}
+                                  className="px-2 py-1 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 font-bold rounded text-[10px] transition-colors cursor-pointer"
+                                >
+                                  Liquidate
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+
+                    {/* Strategy Guidance Callout */}
+                    <div className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800 text-[11px] text-slate-300 flex items-start gap-2">
+                      <Info className="h-4 w-4 text-cyan-400 shrink-0 mt-0.5" />
+                      <p className="leading-relaxed">
+                        <strong className="text-amber-300">System Exit Protocol:</strong> Dropping off the entry screener does <em>not</em> mandate an immediate exit. Your investment remains protected by the active trailing stop-loss (₹{positionsHealthAnalysis.find(p => p.isFlagged)?.pos.stopLoss}). Liquidate only when the hard stop breaker is hit or trend breakdown confirms on Friday 15:30 IST close.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="p-3.5 rounded-2xl bg-emerald-950/30 border border-emerald-500/30 flex items-center justify-between text-xs text-emerald-300 shadow-sm">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                  <span>
+                    <strong>Portfolio Health Verified:</strong> All {portfolio.positions.length} active positions are qualified in the Top 32 Universe with confirmed Multi-Timeframe Momentum.
+                  </span>
+                </div>
+                <span className="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                  100% QUALIFIED
                 </span>
               </div>
+            )}
 
-              {portfolio.positions.length === 0 ? (
+            {/* Active Virtual Positions Table */}
+            <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 shadow-lg space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-white flex items-center gap-2">
+                    <Briefcase className="h-4 w-4 text-emerald-400" />
+                    Active Theoretical Positions ({displayedPositions.length}{paperFilterAlertOnly ? ` of ${portfolio.positions.length}` : ''})
+                  </h3>
+                  {paperFilterAlertOnly && (
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono font-bold">
+                      Flagged Filter Active
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2 text-xs">
+                  {flaggedPositionsCount > 0 && (
+                    <button
+                      onClick={() => setPaperFilterAlertOnly(!paperFilterAlertOnly)}
+                      className="text-xs text-amber-400 hover:text-amber-300 font-semibold flex items-center gap-1 cursor-pointer"
+                    >
+                      <AlertTriangle className="h-3.5 w-3.5" />
+                      <span>{paperFilterAlertOnly ? 'Clear Filter' : `Show ${flaggedPositionsCount} Flagged Only`}</span>
+                    </button>
+                  )}
+                  <span className="text-slate-400">
+                    Target Concentration: 5 to 7 stocks capped
+                  </span>
+                </div>
+              </div>
+
+              {displayedPositions.length === 0 ? (
                 <div className="p-8 text-center text-xs text-slate-400">
-                  No open positions. Go to Model Candidates tab to initiate theoretical entries.
+                  {paperFilterAlertOnly
+                    ? 'No positions match the flagged criteria filter.'
+                    : 'No open positions. Go to Model Candidates tab to initiate theoretical entries.'}
                 </div>
               ) : (
                 <div className="overflow-x-auto">
@@ -2895,17 +3127,29 @@ export function App() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/60 font-medium">
-                      {portfolio.positions.map((pos) => {
-                        const scrip = stockScrips.find((s) => s.symbol === pos.symbol);
-                        const isStopLossTriggered = pos.currentPrice <= pos.stopLoss;
-                        const isTrimTriggered = scrip?.extremeValuationTrimPrice ? pos.currentPrice >= scrip.extremeValuationTrimPrice : false;
-                        const isOffScreener = scrip ? scrip.qualificationTier !== 'Tier 5 Qualified' : false;
+                      {displayedPositions.map(({ pos, scrip, profile, isDroppedFrom32, isFailedMomentum, isStopLossTriggered, isTrimTriggered, isFlagged, passedIndicatorCount }) => {
                         const isBelow50Dma = scrip ? !scrip.above50Dma : false;
 
                         return (
-                          <tr key={pos.id} className="hover:bg-slate-800/30">
+                          <tr
+                            key={pos.id}
+                            className={`transition-colors ${
+                              isStopLossTriggered
+                                ? 'bg-rose-950/30 border-l-4 border-rose-500 hover:bg-rose-950/40'
+                                : isFlagged
+                                ? 'bg-amber-950/20 border-l-4 border-amber-500 hover:bg-amber-950/30'
+                                : 'hover:bg-slate-800/30'
+                            }`}
+                          >
                             <td className="py-3 px-3">
-                              <span className="font-bold text-white text-xs">{pos.symbol}</span>
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-bold text-white text-xs">{pos.symbol}</span>
+                                {isFlagged && (
+                                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 font-mono text-[9px] font-bold">
+                                    <AlertTriangle className="h-2.5 w-2.5" /> Attention
+                                  </span>
+                                )}
+                              </div>
                               <div className="text-[10px] text-slate-400 truncate max-w-[120px]">{pos.name}</div>
                             </td>
                             <td className="py-3 px-3 text-slate-400 font-mono text-[11px]">{pos.entryDate}</td>
@@ -2917,29 +3161,46 @@ export function App() {
                                 {pos.pnl >= 0 ? `+₹${pos.pnl.toLocaleString('en-IN')}` : `-₹${Math.abs(pos.pnl).toLocaleString('en-IN')}`} ({pos.pnlPct}%)
                               </span>
                             </td>
-                            <td className="py-3 px-3 text-rose-400 font-mono">₹{pos.stopLoss}</td>
+                            <td className="py-3 px-3 text-rose-400 font-mono font-bold">₹{pos.stopLoss}</td>
                             <td className="py-3 px-3">
-                              {isStopLossTriggered ? (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40 animate-pulse">
-                                  🔴 Hard Stop Hit (-6.5%) · Exit Now
-                                </span>
-                              ) : isTrimTriggered ? (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/40">
-                                  🟣 Valuation Extended (+1.5σ) · Trim 50%
-                                </span>
-                              ) : isOffScreener ? (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">
-                                  🟡 Dropped Off Screener · Trailing Stop Active
-                                </span>
-                              ) : isBelow50Dma ? (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-orange-500/15 text-orange-300 border border-orange-500/30">
-                                  🟠 Below 50-DMA · Watch Friday Close
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-                                  🟢 Screener Qualified · Trend Holding
-                                </span>
-                              )}
+                              <div className="space-y-1">
+                                {isStopLossTriggered ? (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40 animate-pulse">
+                                    🔴 Hard Stop Hit (-6.5%) · Action: Exit Now
+                                  </span>
+                                ) : isTrimTriggered ? (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/40">
+                                    🟣 Valuation Extended (+1.5σ) · Trim 50%
+                                  </span>
+                                ) : isDroppedFrom32 ? (
+                                  <div className="space-y-0.5">
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                                      ⚠️ Dropped Off 32-Universe ({scrip?.qualificationTier || 'Watchlist'})
+                                    </span>
+                                    <div className="text-[9px] text-slate-400 font-mono">
+                                      MTF: {passedIndicatorCount}/8 Passed · Trailing Stop Active (₹{pos.stopLoss})
+                                    </div>
+                                  </div>
+                                ) : isFailedMomentum ? (
+                                  <div className="space-y-0.5">
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-orange-500/15 text-orange-300 border border-orange-500/30">
+                                      🟠 Failed Momentum Criteria ({passedIndicatorCount}/8 Passed)
+                                    </span>
+                                    <div className="text-[9px] text-slate-400 font-mono">
+                                      {isBelow50Dma ? 'Below 50-DMA' : 'MTF Desynced'} · Watch Friday Close
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="space-y-0.5">
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                                      🟢 Screener Qualified · MTF Verified ({passedIndicatorCount}/8)
+                                    </span>
+                                    <div className="text-[9px] text-emerald-400/80 font-mono">
+                                      Trend Holding · Friday Qualified
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
                             </td>
                             <td className="py-3 px-3 text-right">
                               <div className="flex items-center justify-end gap-1.5">
