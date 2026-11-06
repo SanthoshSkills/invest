@@ -101,7 +101,7 @@ export function SeedFundModal({
               </span>
             </h2>
             <p className="text-xs text-slate-400">
-              Customize your initial deployment capital, monthly staging inflows, and regime cash buffers.
+              Customize your initial deployment capital, monthly staging inflows, and market mode cash buffers.
             </p>
           </div>
         </div>

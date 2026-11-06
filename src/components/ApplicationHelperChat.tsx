@@ -40,14 +40,14 @@ export interface ChatMenuItem {
   id: number;
   title: string;
   prompt: string;
-  category: 'Backtesting' | 'Momentum MTF' | 'Execution' | 'Market Data' | 'Regimes & Sectors' | 'Terminal Engines';
+  category: 'Backtesting' | 'Momentum MTF' | 'Execution' | 'Market Data' | 'Modes & Sectors' | 'Terminal Engines';
 }
 
 export const MENU_QUESTIONS: ChatMenuItem[] = [
   {
     id: 1,
-    title: 'How backtesting adapts strategies across regime sub-timeframes',
-    prompt: 'How does backtesting adapt strategies across regime sub-timeframes?',
+    title: 'How backtesting adapts strategies across market mode sub-timeframes',
+    prompt: 'How does backtesting adapt strategies across market mode sub-timeframes?',
     category: 'Backtesting',
   },
   {
@@ -112,14 +112,14 @@ export const MENU_QUESTIONS: ChatMenuItem[] = [
   },
   {
     id: 12,
-    title: 'How regime change triggers are identified (4 quantitative sensors)',
-    prompt: 'How will you identify if a regime has changed?',
-    category: 'Regimes & Sectors',
+    title: 'How market mode change triggers are identified (4 quantitative sensors)',
+    prompt: 'How will you identify if a market mode has changed?',
+    category: 'Modes & Sectors',
   },
   {
     id: 13,
     title: 'Operational review cadence (Daily, Weekly, Monthly, Quarterly)',
-    prompt: 'When do you check for the regime change triggers?',
+    prompt: 'When do you check for the market mode change triggers?',
     category: 'Execution',
   },
   {
@@ -144,19 +144,19 @@ export const MENU_QUESTIONS: ChatMenuItem[] = [
     id: 17,
     title: 'Sectors currently in Leading & Improving RRG quadrants',
     prompt: 'What sectors are in the Leading and Improving quadrants?',
-    category: 'Regimes & Sectors',
+    category: 'Modes & Sectors',
   },
   {
     id: 18,
-    title: 'All 8 market regimes catalog & dynamic allocation rules',
-    prompt: 'What are all 8 market regimes?',
-    category: 'Regimes & Sectors',
+    title: 'All 8 market modes catalog & dynamic allocation rules',
+    prompt: 'What are all 8 market modes?',
+    category: 'Modes & Sectors',
   },
   {
     id: 19,
-    title: 'Current active market regime technical sensors & exposure status',
-    prompt: 'What is the current active regime status?',
-    category: 'Regimes & Sectors',
+    title: 'Current active market mode technical sensors & exposure status',
+    prompt: 'What is the current active mode status?',
+    category: 'Modes & Sectors',
   },
   {
     id: 20,
@@ -169,6 +169,12 @@ export const MENU_QUESTIONS: ChatMenuItem[] = [
     title: 'When to exit a stock if it drops off the 32 or momentum universe',
     prompt: 'If I invested in a stock and it drops off the 32 or momentum universe, how do I know when to exit?',
     category: 'Execution',
+  },
+  {
+    id: 22,
+    title: 'The 3 Strategy Modes: Val-Mo vs Weekly Momentum vs Daily Momentum',
+    prompt: 'Explain the 3 strategy framework modes: Val-Mo, Weekly Momentum, and Daily Momentum',
+    category: 'Terminal Engines',
   },
 ];
 
@@ -227,7 +233,7 @@ export const ApplicationHelperChat: React.FC<ApplicationHelperChatProps> = ({
 
   // Categories for in-chat menu filtering
   const categories = useMemo(() => {
-    return ['All', 'Backtesting', 'Momentum MTF', 'Execution', 'Market Data', 'Regimes & Sectors', 'Terminal Engines'];
+    return ['All', 'Backtesting', 'Momentum MTF', 'Execution', 'Market Data', 'Modes & Sectors', 'Terminal Engines'];
   }, []);
 
   // Filtered menu items for the interactive list
@@ -258,21 +264,21 @@ export const ApplicationHelperChat: React.FC<ApplicationHelperChatProps> = ({
       };
     }
 
-    // Question 1 / Backtest regime sub-timeframe adaptation
+    // Question 1 / Backtest market mode sub-timeframe adaptation
     if (
       resolvedId === 1 ||
-      (q.includes('backtest') && (q.includes('sub timeframe') || q.includes('sub-timeframe') || q.includes('sub timeframes') || q.includes('adapt') || q.includes('different strateg') || q.includes('regime prevalent')))
+      (q.includes('backtest') && (q.includes('sub timeframe') || q.includes('sub-timeframe') || q.includes('sub timeframes') || q.includes('adapt') || q.includes('different strateg') || q.includes('regime prevalent') || q.includes('mode prevalent')))
     ) {
       return {
-        text: `How Backtesting Works & Sub-Timeframe Regime Strategy Adaptation:
+        text: `How Backtesting Works & Sub-Timeframe Market Mode Strategy Adaptation:
 
 1. Quantitative Backtesting Methodology:
-- Walk-Forward Sub-Timeframe Windows: The simulation partitions the 2020–2026 test horizon into 4 distinct empirical market regimes rather than assuming a static market.
+- Walk-Forward Sub-Timeframe Windows: The simulation partitions the 2020–2026 test horizon into 4 distinct empirical market modes rather than assuming a static market.
 - Frictional Reality: Every closed trade incorporates 20% Short-Term Capital Gains (STCG) tax drag, STT, and Demat Participant (DP) execution charges.
 - Friday Weekly Close Execution: While screening monitors daily and weekly indicators continuously for alerts, actual trade entries are locked to Friday 15:30 IST weekly closes. Entries require all 4 Daily Triggers + 4 Weekly Macro Trend indicators to align simultaneously on the closing bar. This filters out intra-week noise.
 
-2. Does It Apply Different Strategies Per Regime in the Sub-Timeframes?
-YES. The backtesting engine dynamically switches strategic exposure, buffer rules, and factor thresholds based on the market regime prevalent in each sub-timeframe window:
+2. Does It Apply Different Strategies Per Market Mode in the Sub-Timeframes?
+YES. The backtesting engine dynamically switches strategic exposure, buffer rules, and factor thresholds based on the market mode prevalent in each sub-timeframe window:
 
 • Sub-Timeframe 1: 2020–2021 (Post-Covid Bull & Speculative Melt-Up):
   - Strategy Applied: Aggressive High-Beta Trend Capture.
@@ -578,13 +584,13 @@ Whenever the Friday close screening introduces newly qualified scrips into the 3
       };
     }
 
-    // Question 12 / Regime Change Identification (4 Sensors)
+    // Question 12 / Market Mode Change Identification (4 Sensors)
     if (
       resolvedId === 12 ||
-      (q.includes('regime') && (q.includes('identify') || q.includes('sensor') || q.includes('detect') || q.includes('change')))
+      ((q.includes('mode') || q.includes('regime')) && (q.includes('identify') || q.includes('sensor') || q.includes('detect') || q.includes('change')))
     ) {
       return {
-        text: `The terminal identifies a regime change using four quantitative market sensors:
+        text: `The terminal identifies a market mode change using four quantitative market sensors:
 
 1. Benchmark Trend Sensor (Nifty 50 vs 200-DMA):
 - Bull: Index trades > +5% above 200-DMA with positive slope.
@@ -632,7 +638,7 @@ Transition Triggers:
 - Screen for extreme valuation trims (+1.5 std dev or weekly RSI > 70).
 
 2. Weekly Cadence (Friday Close / Monday Pre-Open):
-- Check the four macro regime sensors (India VIX average, Nifty distance from 200-DMA, Breadth % > 50-DMA, Trailing P/E).
+- Check the four macro market mode sensors (India VIX average, Nifty distance from 200-DMA, Breadth % > 50-DMA, Trailing P/E).
 - Recompute Relative Rotation Graphs (RRG) for all macro sectors.
 - Recalculate weekly Val-Mo scores and factor contributions (Value % vs Momentum %).
 - Execute Momentum investments if both Daily and Weekly criteria are satisfied on Friday close.
@@ -661,7 +667,7 @@ Transition Triggers:
 The system identifies top-tier compounders in Nifty 500 at inflection points. It removes emotional biases from your stock selection.
 
 2. Downside Capital Protection:
-The system dynamically scales liquid cash reserves (up to 80%–90% in Bear or Shock regimes). It strictly enforces a -6.5% hard stop-loss to prevent catastrophic drawdowns.
+The system dynamically scales liquid cash reserves (up to 80%–90% in Bear or Shock market modes). It strictly enforces a -6.5% hard stop-loss to prevent catastrophic drawdowns.
 
 3. Friction and Drag Elimination:
 The system limits portfolio concentration to ${capitalConfig.targetStockCount} high-conviction scrips. It enforces minimum position sizes (₹${capitalConfig.minPositionSize.toLocaleString('en-IN')}) so depository charges (DP fees) do not erode compounding.
@@ -694,8 +700,8 @@ The system calculates real-time +6% scale-in triggers and -6.5% stop-loss exit t
 4. Tactical Staging Pool Inflow Router:
 The system routes monthly cash contributions into Liquid BeES buffers. It deploys capital only when qualified opportunities appear.
 
-5. Historical Multi-Regime Stress Simulation:
-The system tests your portfolio rules against four empirical market regimes (2020 Covid melt-up, 2022 rate hike churn, 2024 capex rotation, May-June 2024 election volatility).
+5. Historical Multi-Mode Stress Simulation:
+The system tests your portfolio rules against four empirical market modes (2020 Covid melt-up, 2022 rate hike churn, 2024 capex rotation, May-June 2024 election volatility).
 
 6. Weekly Factor Attribution Engine:
 The system recalculates exact point contributions from the Value factor (50 pts) and Momentum factor (50 pts) for every scrip each week.`,
@@ -754,32 +760,35 @@ Both Pure Momentum and Val-Mo strategies restrict candidate selection to these t
       };
     }
 
-    // Question 18 / All 8 Market Regimes Catalog
+    // Question 18 / All 8 Market Modes Catalog
     if (
       resolvedId === 18 ||
-      (q.includes('all') && q.includes('regime')) ||
+      (q.includes('all') && (q.includes('mode') || q.includes('regime'))) ||
+      q.includes('8 mode') ||
       q.includes('8 regime') ||
       q.includes('catalog')
     ) {
-      const regimeList = allRegimes
+      const modeList = allRegimes
         .map(
           (r, idx) =>
             `${idx + 1}. ${r.name} (${r.status === 'active' ? 'ACTIVE' : 'Inactive'}): ${r.technicalSignals} • ${r.equityAllocationPct}% Equity / ${r.cashAllocationPct}% Cash.`
         )
         .join('\n');
       return {
-        text: `The terminal tracks ${allRegimes.length} discrete market regimes:\n\n${regimeList}`,
+        text: `The terminal tracks ${allRegimes.length} discrete market modes:\n\n${modeList}`,
       };
     }
 
-    // Question 19 / Current Active Market Regime Status
+    // Question 19 / Current Active Market Mode Status
     if (
       resolvedId === 19 ||
+      q.includes('active mode') ||
+      q.includes('current mode') ||
       q.includes('active regime') ||
       q.includes('current regime')
     ) {
       return {
-        text: `Current Active Regime: "${activeRegime.name}"
+        text: `Current Active Market Mode: "${activeRegime.name}"
 Tagline: ${activeRegime.tagline}
 - Status: Active
 - Target Equity Allocation: ${activeRegime.equityAllocationPct}%
@@ -866,6 +875,46 @@ This guarantees that each position receives an equal, risk-calibrated allocation
       };
     }
 
+    // Question 22 / The 3 Strategy Modes: Val-Mo vs Weekly Momentum vs Daily Momentum
+    if (
+      resolvedId === 22 ||
+      (q.includes('3 strategy') || q.includes('three strateg') || (q.includes('weekly') && q.includes('daily') && q.includes('val mo')) || q.includes('strategy mode'))
+    ) {
+      return {
+        text: `The 3 Strategy Framework Selections in the Terminal:
+
+1. Val-Mo Strategy (Value + Momentum Integrated):
+- Concept: Combines fundamental valuation margin of safety with technical trend confirmation.
+- Fundamental Gate: ROCE ≥ 16%, Debt-to-Equity ≤ 0.8x, PEG ≤ 1.75x, and discount vs 5-year median P/E.
+- Technical Gate: Price > 50-DMA with ascending slope and delivery volume expansion (> 1.4x).
+- Interactive Controls: Scrips display dual-color factor split bars (Value % vs Momentum %), interactive 30D sparklines, and clickable MTF audit buttons.
+
+2. Weekly Momentum (Macro Trend + Friday Close Execution):
+- Concept: Macro trend capture across weekly timeframes with strict end-of-week commitment.
+- 4 Weekly Macro Indicators:
+  1. Weekly Triple EMA Bands: Price above Weekly EMA 13 > 34 > 89 on consecutive closes.
+  2. Weekly ADX Macro Strength: Sustained ADX > 30 and rising.
+  3. Weekly Volume Accumulation OR RSI Bullish Divergence.
+  4. Multi-Timeframe Synchronization: Daily triggers align with Weekly macro trend.
+- Execution Rule: Investment executed strictly on Friday 15:30 IST close when both Daily and Weekly criteria align.
+
+3. Daily Momentum (Fast Tactical Leading Triggers):
+- Concept: Rapid tactical breakout screening based on leading daily momentum indicators.
+- 4 Daily Leading Indicators:
+  1. Triple EMA Cross & Alignment: Price > EMA 9 > EMA 21 > EMA 55.
+  2. Daily ADX Trend Acceleration: ADX > 20/25 with +DI > -DI.
+  3. Volume Expansion OR RSI Momentum Room (Vol > 20-DMA or RSI 45–65).
+  4. Volatility Expansion: Range > 14-day ATR or Bollinger Band expansion.
+- Execution Rule: Fast breakout entry for tactical allocations.
+
+Standardization Across All 3 Views:
+Every scrip row across Val-Mo, Weekly Momentum, and Daily Momentum features the standard 3 action buttons:
+- 📊 [Chart]: Opens Technical Chart & DMA Workbench.
+- ⚡ [MTF]: Opens Multi-Timeframe Leading Indicators Audit Modal.
+- 💼 [Paper Buy]: Allocates theoretical position lot to virtual portfolio.`,
+      };
+    }
+
     // Dynamic stock scrip query fallback
     const foundScrip = stockScrips.find(
       (s) => q.includes(s.symbol.toLowerCase()) || q.includes(s.name.toLowerCase())
@@ -887,7 +936,7 @@ This guarantees that each position receives an equal, risk-calibrated allocation
 
     // Default Fallback
     return {
-      text: `Your query was received. The terminal currently monitors ${stockScrips.length} Nifty 500 scrips across ${macroSectors.length} macro sectors under the active "${activeRegime.name}" regime.\n\nClick the "📋 Menu List" button or type any question number (1 to 21) to view detailed quantitative answers.`,
+      text: `Your query was received. The terminal currently monitors ${stockScrips.length} Nifty 500 scrips across ${macroSectors.length} macro sectors under the active "${activeRegime.name}" market mode.\n\nClick the "📋 Menu List" button or type any question number (1 to 22) to view detailed quantitative answers.`,
     };
   };
 
@@ -895,7 +944,7 @@ This guarantees that each position receives an equal, risk-calibrated allocation
     const menuMessage: ChatMessage = {
       id: `menu-${Date.now()}`,
       sender: 'assistant',
-      text: 'Here is the complete Question Menu. Click any item or type its number (1 to 21):',
+      text: 'Here is the complete Question Menu. Click any item or type its number (1 to 22):',
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       isSte100Compliant: true,
       isMenu: true,
@@ -1067,7 +1116,7 @@ This guarantees that each position receives an equal, risk-calibrated allocation
               ASD-STE100 active • Live terminal verification
             </span>
             <span className="text-emerald-400 font-mono font-semibold">
-              Regime: {activeRegime.name.split(' ')[0]} ({activeRegime.equityAllocationPct}% Eq / {activeRegime.cashAllocationPct}% Cash)
+              Mode: {activeRegime.name.split(' ')[0]} ({activeRegime.equityAllocationPct}% Eq / {activeRegime.cashAllocationPct}% Cash)
             </span>
           </div>
 

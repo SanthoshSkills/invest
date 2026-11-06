@@ -162,7 +162,21 @@ export interface ScripMomentumProfile {
   rankInSector: number;
   isTop15Overall: boolean;
   isTop5InSector: boolean;
+  // Dedicated Daily Leading Momentum rankings & scores
+  dailyMomentumScore: number;
+  dailyRankOverall: number;
+  dailyRankInSector: number;
+  isDailyTop15Overall: boolean;
+  isDailyTop5InSector: boolean;
+  // Dedicated Weekly Macro Momentum rankings & scores
+  weeklyMomentumScore: number;
+  weeklyRankOverall: number;
+  weeklyRankInSector: number;
+  isWeeklyTop15Overall: boolean;
+  isWeeklyTop5InSector: boolean;
 }
+
+export type StrategyModeType = 'val_mo' | 'weekly_momentum' | 'daily_momentum';
 
 export interface StrategyPerformanceMetrics {
   totalReturnPct: string;

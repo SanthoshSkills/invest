@@ -20,6 +20,8 @@ export function computeScripMomentum(stock: StockScrip): {
   daily: DailyLeadingIndicators;
   weekly: WeeklyLeadingIndicators;
   pureMomentumScore: number;
+  dailyMomentumScore: number;
+  weeklyMomentumScore: number;
   totalIndicatorCount: number;
   isMtfSynced: boolean;
   isWeeklyCloseQualified: boolean;
@@ -177,14 +179,27 @@ export function computeScripMomentum(stock: StockScrip): {
       : 'Not Qualified';
 
   // Pure Momentum Score (0-100 scale)
+  // Pure Momentum Score (0-100 scale)
   const baseScore = Math.round((totalIndicatorCount / 8) * 85);
   const rsBonus = Math.max(0, Math.min(15, Math.round(rsVal * 1.8)));
   const pureMomentumScore = Math.min(100, baseScore + rsBonus);
+
+  // Dedicated Daily Leading Momentum Score (0-100 scale)
+  const dailyBaseScore = Math.round((dailyPassedCount / 4) * 80);
+  const dailyRsBonus = Math.max(0, Math.min(20, Math.round(rsVal * 2.2)));
+  const dailyMomentumScore = Math.min(100, dailyBaseScore + dailyRsBonus);
+
+  // Dedicated Weekly Macro Momentum Score (0-100 scale)
+  const weeklyBaseScore = Math.round((weeklyPassedCount / 4) * 80);
+  const weeklyRsBonus = Math.max(0, Math.min(20, Math.round(rsVal * 2.2)));
+  const weeklyMomentumScore = Math.min(100, weeklyBaseScore + weeklyRsBonus);
 
   return {
     daily,
     weekly,
     pureMomentumScore,
+    dailyMomentumScore,
+    weeklyMomentumScore,
     totalIndicatorCount,
     isMtfSynced: mtfSynchronized,
     isWeeklyCloseQualified,
@@ -193,7 +208,8 @@ export function computeScripMomentum(stock: StockScrip): {
 }
 
 /**
- * Computes full Momentum Profiles and assigns Top 15 Overall and Top 5 Per Segment rankings.
+ * Computes full Momentum Profiles and assigns Top 15 Overall and Top 5 Per Segment rankings
+ * for combined MTF, Daily Leading Momentum, and Weekly Macro Momentum.
  */
 export function buildUniverseMomentumProfiles(scrips: StockScrip[]): Map<string, ScripMomentumProfile> {
   // 1. Calculate raw momentum indicators for each scrip
@@ -213,13 +229,48 @@ export function buildUniverseMomentumProfiles(scrips: StockScrip[]): Map<string,
     return (scripB?.rsMansfield3M || 0) - (scripA?.rsMansfield3M || 0);
   });
 
-  // Assign overall rank
   const overallRankMap = new Map<string, number>();
   sortedOverall.forEach((item, index) => {
     overallRankMap.set(item.symbol, index + 1);
   });
 
-  // 3. Rank within each sector (Top 5 per segment)
+  // 3. Rank overall by Daily Momentum Score descending
+  const sortedDailyOverall = [...rawProfiles].sort((a, b) => {
+    if (b.dailyMomentumScore !== a.dailyMomentumScore) {
+      return b.dailyMomentumScore - a.dailyMomentumScore;
+    }
+    if (b.daily.passedCount !== a.daily.passedCount) {
+      return b.daily.passedCount - a.daily.passedCount;
+    }
+    const scripA = scrips.find((s) => s.symbol === a.symbol);
+    const scripB = scrips.find((s) => s.symbol === b.symbol);
+    return (scripB?.rsMansfield3M || 0) - (scripA?.rsMansfield3M || 0);
+  });
+
+  const dailyOverallRankMap = new Map<string, number>();
+  sortedDailyOverall.forEach((item, index) => {
+    dailyOverallRankMap.set(item.symbol, index + 1);
+  });
+
+  // 4. Rank overall by Weekly Momentum Score descending
+  const sortedWeeklyOverall = [...rawProfiles].sort((a, b) => {
+    if (b.weeklyMomentumScore !== a.weeklyMomentumScore) {
+      return b.weeklyMomentumScore - a.weeklyMomentumScore;
+    }
+    if (b.weekly.passedCount !== a.weekly.passedCount) {
+      return b.weekly.passedCount - a.weekly.passedCount;
+    }
+    const scripA = scrips.find((s) => s.symbol === a.symbol);
+    const scripB = scrips.find((s) => s.symbol === b.symbol);
+    return (scripB?.rsMansfield3M || 0) - (scripA?.rsMansfield3M || 0);
+  });
+
+  const weeklyOverallRankMap = new Map<string, number>();
+  sortedWeeklyOverall.forEach((item, index) => {
+    weeklyOverallRankMap.set(item.symbol, index + 1);
+  });
+
+  // 5. Rank within each sector (Top 5 per segment) for MTF, Daily, and Weekly
   const sectorGroups = new Map<string, typeof rawProfiles>();
   rawProfiles.forEach((p) => {
     const list = sectorGroups.get(p.sectorId) || [];
@@ -228,8 +279,12 @@ export function buildUniverseMomentumProfiles(scrips: StockScrip[]): Map<string,
   });
 
   const sectorRankMap = new Map<string, number>();
+  const dailySectorRankMap = new Map<string, number>();
+  const weeklySectorRankMap = new Map<string, number>();
+
   sectorGroups.forEach((list) => {
-    list.sort((a, b) => {
+    // MTF Sector Rank
+    const mtfList = [...list].sort((a, b) => {
       if (b.pureMomentumScore !== a.pureMomentumScore) {
         return b.pureMomentumScore - a.pureMomentumScore;
       }
@@ -237,20 +292,59 @@ export function buildUniverseMomentumProfiles(scrips: StockScrip[]): Map<string,
       const scripB = scrips.find((s) => s.symbol === b.symbol);
       return (scripB?.rsMansfield3M || 0) - (scripA?.rsMansfield3M || 0);
     });
-    list.forEach((item, index) => {
+    mtfList.forEach((item, index) => {
       sectorRankMap.set(item.symbol, index + 1);
+    });
+
+    // Daily Sector Rank
+    const dailyList = [...list].sort((a, b) => {
+      if (b.dailyMomentumScore !== a.dailyMomentumScore) {
+        return b.dailyMomentumScore - a.dailyMomentumScore;
+      }
+      if (b.daily.passedCount !== a.daily.passedCount) {
+        return b.daily.passedCount - a.daily.passedCount;
+      }
+      const scripA = scrips.find((s) => s.symbol === a.symbol);
+      const scripB = scrips.find((s) => s.symbol === b.symbol);
+      return (scripB?.rsMansfield3M || 0) - (scripA?.rsMansfield3M || 0);
+    });
+    dailyList.forEach((item, index) => {
+      dailySectorRankMap.set(item.symbol, index + 1);
+    });
+
+    // Weekly Sector Rank
+    const weeklyList = [...list].sort((a, b) => {
+      if (b.weeklyMomentumScore !== a.weeklyMomentumScore) {
+        return b.weeklyMomentumScore - a.weeklyMomentumScore;
+      }
+      if (b.weekly.passedCount !== a.weekly.passedCount) {
+        return b.weekly.passedCount - a.weekly.passedCount;
+      }
+      const scripA = scrips.find((s) => s.symbol === a.symbol);
+      const scripB = scrips.find((s) => s.symbol === b.symbol);
+      return (scripB?.rsMansfield3M || 0) - (scripA?.rsMansfield3M || 0);
+    });
+    weeklyList.forEach((item, index) => {
+      weeklySectorRankMap.set(item.symbol, index + 1);
     });
   });
 
-  // 4. Assemble final profile map
+  // 6. Assemble final profile map
   const resultMap = new Map<string, ScripMomentumProfile>();
   rawProfiles.forEach((p) => {
     const rankOverall = overallRankMap.get(p.symbol) || 99;
     const rankInSector = sectorRankMap.get(p.symbol) || 99;
+    const dailyRankOverall = dailyOverallRankMap.get(p.symbol) || 99;
+    const dailyRankInSector = dailySectorRankMap.get(p.symbol) || 99;
+    const weeklyRankOverall = weeklyOverallRankMap.get(p.symbol) || 99;
+    const weeklyRankInSector = weeklySectorRankMap.get(p.symbol) || 99;
+
     resultMap.set(p.symbol, {
       daily: p.daily,
       weekly: p.weekly,
       pureMomentumScore: p.pureMomentumScore,
+      dailyMomentumScore: p.dailyMomentumScore,
+      weeklyMomentumScore: p.weeklyMomentumScore,
       totalIndicatorCount: p.totalIndicatorCount,
       isMtfSynced: p.isMtfSynced,
       isWeeklyCloseQualified: p.isWeeklyCloseQualified,
@@ -259,6 +353,14 @@ export function buildUniverseMomentumProfiles(scrips: StockScrip[]): Map<string,
       rankInSector,
       isTop15Overall: rankOverall <= 15,
       isTop5InSector: rankInSector <= 5,
+      dailyRankOverall,
+      dailyRankInSector,
+      isDailyTop15Overall: dailyRankOverall <= 15,
+      isDailyTop5InSector: dailyRankInSector <= 5,
+      weeklyRankOverall,
+      weeklyRankInSector,
+      isWeeklyTop15Overall: weeklyRankOverall <= 15,
+      isWeeklyTop5InSector: weeklyRankInSector <= 5,
     });
   });
 

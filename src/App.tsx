@@ -54,7 +54,7 @@ import {
   INITIAL_PAPER_PORTFOLIO,
   BACKTEST_SCENARIOS,
 } from './data/nifty500Data';
-import { StockScrip, PaperPosition, RegimeType, RrgQuadrant } from './types/strategy';
+import { StockScrip, PaperPosition, RegimeType, RrgQuadrant, StrategyModeType } from './types/strategy';
 import { SectorTreemap } from './components/SectorTreemap';
 import { PipelineExecutionModal } from './components/PipelineExecutionModal';
 import { SparklineChart } from './components/SparklineChart';
@@ -143,8 +143,8 @@ export function App() {
   // Active Navigation View (hierarchy | candidates | paper | backtest | manual)
   const [activeTab, setActiveTab] = useState<'hierarchy' | 'candidates' | 'paper' | 'backtest' | 'manual'>('hierarchy');
 
-  // Strategy Mode: Val-Mo (Value + Momentum) vs Pure Momentum (Daily + Weekly MTF)
-  const [strategyMode, setStrategyMode] = useState<'val_mo' | 'pure_momentum'>('val_mo');
+  // Strategy Mode: Val-Mo (Value + Momentum) vs Weekly Momentum vs Daily Momentum
+  const [strategyMode, setStrategyMode] = useState<StrategyModeType>('val_mo');
   const [pureMomentumScopeFilter, setPureMomentumScopeFilter] = useState<'top15' | 'top5_segment' | 'all'>('top15');
   const [inspectedMomentumStock, setInspectedMomentumStock] = useState<StockScrip | null>(null);
 
@@ -583,27 +583,49 @@ export function App() {
     });
   }, [selectedQuadrants]);
 
-  // Filtered by custom ranges & Val-Mo / Status OR Pure Momentum Rankings
+  // Filtered by custom ranges & Val-Mo / Status OR Weekly / Daily Momentum Rankings
   const filteredHierarchyStocks = useMemo(() => {
-    if (strategyMode === 'pure_momentum') {
-      // PURE MOMENTUM STRATEGY:
-      // Same macro hierarchy criteria on Regime, Macro Sector (RRG Leading/Improving), Industry Inflection, Moat.
-      // Filtered strictly by Daily Execution Triggers & Weekly Macro Bias (Top 15 Overall, Top 5 per Segment, or All MTF).
+    if (strategyMode === 'weekly_momentum') {
+      // WEEKLY MOMENTUM STRATEGY:
+      // Same macro hierarchy criteria on Market Mode, Macro Sector (RRG Leading/Improving), Industry Inflection, Moat.
+      // Filtered strictly by Weekly Macro Bias & MTF (Top 15 Overall, Top 5 per Segment, or All MTF).
       return baseHierarchyPool
         .filter((s) => {
           const profile = universeMomentumProfiles.get(s.symbol);
           if (!profile) return true;
           if (pureMomentumScopeFilter === 'top15') {
-            return profile.isTop15Overall;
+            return profile.isWeeklyTop15Overall ?? profile.isTop15Overall;
           }
           if (pureMomentumScopeFilter === 'top5_segment') {
-            return profile.isTop5InSector;
+            return profile.isWeeklyTop5InSector ?? profile.isTop5InSector;
           }
           return true;
         })
         .sort((a, b) => {
-          const scoreA = universeMomentumProfiles.get(a.symbol)?.pureMomentumScore || 0;
-          const scoreB = universeMomentumProfiles.get(b.symbol)?.pureMomentumScore || 0;
+          const scoreA = universeMomentumProfiles.get(a.symbol)?.weeklyMomentumScore ?? universeMomentumProfiles.get(a.symbol)?.pureMomentumScore ?? 0;
+          const scoreB = universeMomentumProfiles.get(b.symbol)?.weeklyMomentumScore ?? universeMomentumProfiles.get(b.symbol)?.pureMomentumScore ?? 0;
+          return scoreB - scoreA;
+        });
+    }
+
+    if (strategyMode === 'daily_momentum') {
+      // DAILY MOMENTUM STRATEGY:
+      // Same macro hierarchy criteria, filtered and ranked strictly by 4 Daily Leading Indicators
+      return baseHierarchyPool
+        .filter((s) => {
+          const profile = universeMomentumProfiles.get(s.symbol);
+          if (!profile) return true;
+          if (pureMomentumScopeFilter === 'top15') {
+            return profile.isDailyTop15Overall;
+          }
+          if (pureMomentumScopeFilter === 'top5_segment') {
+            return profile.isDailyTop5InSector;
+          }
+          return true;
+        })
+        .sort((a, b) => {
+          const scoreA = universeMomentumProfiles.get(a.symbol)?.dailyMomentumScore || 0;
+          const scoreB = universeMomentumProfiles.get(b.symbol)?.dailyMomentumScore || 0;
           return scoreB - scoreA;
         });
     }
@@ -643,17 +665,32 @@ export function App() {
 
   // Model Qualified Candidates with custom filters
   const qualifiedCandidates = useMemo(() => {
-    if (strategyMode === 'pure_momentum') {
-      // Top Momentum picks passing macro hierarchy and MTF criteria
+    if (strategyMode === 'weekly_momentum') {
+      // Top Weekly Momentum picks passing macro hierarchy and MTF criteria
       return stockScrips
         .filter((s) => {
           const profile = universeMomentumProfiles.get(s.symbol);
           if (!profile) return false;
-          return (profile.isTop15Overall || profile.isTop5InSector) && profile.totalIndicatorCount >= 4;
+          return (profile.isWeeklyTop15Overall || profile.isWeeklyTop5InSector) && profile.weekly.passedCount >= 2;
         })
         .sort((a, b) => {
-          const scoreA = universeMomentumProfiles.get(a.symbol)?.pureMomentumScore || 0;
-          const scoreB = universeMomentumProfiles.get(b.symbol)?.pureMomentumScore || 0;
+          const scoreA = universeMomentumProfiles.get(a.symbol)?.weeklyMomentumScore ?? universeMomentumProfiles.get(a.symbol)?.pureMomentumScore ?? 0;
+          const scoreB = universeMomentumProfiles.get(b.symbol)?.weeklyMomentumScore ?? universeMomentumProfiles.get(b.symbol)?.pureMomentumScore ?? 0;
+          return scoreB - scoreA;
+        });
+    }
+
+    if (strategyMode === 'daily_momentum') {
+      // Top Daily Momentum picks passing macro hierarchy and daily execution triggers
+      return stockScrips
+        .filter((s) => {
+          const profile = universeMomentumProfiles.get(s.symbol);
+          if (!profile) return false;
+          return (profile.isDailyTop15Overall || profile.isDailyTop5InSector) && profile.daily.passedCount >= 2;
+        })
+        .sort((a, b) => {
+          const scoreA = universeMomentumProfiles.get(a.symbol)?.dailyMomentumScore || 0;
+          const scoreB = universeMomentumProfiles.get(b.symbol)?.dailyMomentumScore || 0;
           return scoreB - scoreA;
         });
     }
@@ -681,9 +718,19 @@ export function App() {
     statusFilter,
   ]);
 
-  // Classify qualified candidates by Val-Mo score with Sector & Overall concentration caps
+  // Classify qualified candidates by Val-Mo score or Momentum score with Sector & Overall concentration caps
   const classifiedCandidates = useMemo(() => {
     const sorted = [...qualifiedCandidates].sort((a, b) => {
+      if (strategyMode === 'weekly_momentum') {
+        const scoreA = universeMomentumProfiles.get(a.symbol)?.weeklyMomentumScore || 0;
+        const scoreB = universeMomentumProfiles.get(b.symbol)?.weeklyMomentumScore || 0;
+        return scoreB - scoreA;
+      }
+      if (strategyMode === 'daily_momentum') {
+        const scoreA = universeMomentumProfiles.get(a.symbol)?.dailyMomentumScore || 0;
+        const scoreB = universeMomentumProfiles.get(b.symbol)?.dailyMomentumScore || 0;
+        return scoreB - scoreA;
+      }
       if (b.valMoScore !== a.valMoScore) return b.valMoScore - a.valMoScore;
       return b.roce3Y - a.roce3Y;
     });
@@ -1045,7 +1092,7 @@ export function App() {
               </div>
               <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400 mt-0.5">
                 <span className="flex items-center gap-1 text-amber-400 font-medium">
-                  <Activity className="h-3 w-3" /> Active Regime: Sideways (40% Liquid Reserve)
+                  <Activity className="h-3 w-3" /> Active Mode: Sideways (40% Liquid Reserve)
                 </span>
                 <span>•</span>
                 <span>P/E: 20.91 (11% disc.)</span>
@@ -1238,13 +1285,13 @@ export function App() {
         {/* ROUTE 1: MARKET HIERARCHY DRILL-DOWN */}
         {activeTab === 'hierarchy' && (
           <div className="space-y-6 animate-fade-in">
-            {/* Level 1: Market Regime Overview Card */}
+            {/* Level 1: Market Mode Overview Card */}
             <div className="bg-slate-900/70 border border-slate-800 rounded-2xl p-5 shadow-xl relative overflow-hidden">
               <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-4">
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/20">
-                      Tier 0: Active Regime
+                      Tier 0: Active Market Mode
                     </span>
                     <span className="text-xs font-semibold text-emerald-400">
                       Nifty 500 Sideways / Transition Band
@@ -1295,9 +1342,9 @@ export function App() {
                 </div>
               </div>
 
-              {/* 8-Regime Quick Selector Strip */}
+              {/* 8-Mode Quick Selector Strip */}
               <div className="pt-2 border-t border-slate-800/60">
-                <div className="text-[11px] font-semibold text-slate-400 mb-2">8-Regime Classification Model:</div>
+                <div className="text-[11px] font-semibold text-slate-400 mb-2">8-Mode Classification Model:</div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
                   {REGIMES_DATA.map((reg) => (
                     <div
@@ -1638,36 +1685,52 @@ export function App() {
                 </div>
               </div>
 
-              {/* Primary Strategy Mode Switcher: Val-Mo vs Pure Momentum */}
-              <div className="mb-4 p-3.5 rounded-xl bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border border-slate-800 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-3">
+              {/* Primary Strategy Mode Switcher: Val-Mo vs Weekly Momentum vs Daily Momentum */}
+              <div className="mb-4 p-3.5 rounded-xl bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border border-slate-800 shadow-md flex flex-col lg:flex-row lg:items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
                   <div className={`p-2 rounded-xl border ${
-                    strategyMode === 'pure_momentum'
+                    strategyMode === 'val_mo'
+                      ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
+                      : strategyMode === 'weekly_momentum'
                       ? 'bg-cyan-500/15 border-cyan-500/30 text-cyan-400'
-                      : 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
+                      : 'bg-amber-500/15 border-amber-500/30 text-amber-400'
                   }`}>
-                    {strategyMode === 'pure_momentum' ? <Zap className="h-5 w-5" /> : <PieChart className="h-5 w-5" />}
+                    {strategyMode === 'val_mo' ? (
+                      <PieChart className="h-5 w-5" />
+                    ) : strategyMode === 'weekly_momentum' ? (
+                      <Zap className="h-5 w-5" />
+                    ) : (
+                      <TrendingUp className="h-5 w-5" />
+                    )}
                   </div>
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xs font-black uppercase tracking-wider text-white">Active Strategy Framework</span>
                       <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${
-                        strategyMode === 'pure_momentum'
+                        strategyMode === 'val_mo'
+                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                          : strategyMode === 'weekly_momentum'
                           ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30'
-                          : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                          : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
                       }`}>
-                        {strategyMode === 'val_mo' ? 'Val-Mo (Value + Momentum Integrated)' : 'Pure Momentum (Daily + Weekly MTF)'}
+                        {strategyMode === 'val_mo'
+                          ? 'Val-Mo (Value + Momentum Integrated)'
+                          : strategyMode === 'weekly_momentum'
+                          ? 'Weekly Momentum (Macro Trend + Friday Close)'
+                          : 'Daily Momentum (Fast Leading Triggers)'}
                       </span>
                     </div>
                     <p className="text-[11px] text-slate-400 mt-0.5">
                       {strategyMode === 'val_mo'
-                        ? 'Integrates fundamental valuation margin of safety (P/E discount, ROCE ≥ 16%, PEG ≤ 1.75x) with technical 50-DMA volume reclaims.'
-                        : 'Retains identical macro hierarchy (Regime Tier 0, Macro Sector RRG Leading/Improving, Industry Inflection > 150 bps EBITDA, Base Moat) ranked by 8 Daily & Weekly MTF Indicators.'}
+                        ? 'Integrates fundamental valuation margin of safety (P/E discount vs 5Y median, ROCE ≥ 16%, PEG ≤ 1.75x) with technical 50-DMA volume reclaims.'
+                        : strategyMode === 'weekly_momentum'
+                        ? 'Retains identical macro hierarchy (Mode Tier 0, Macro Sector RRG Leading/Improving, Industry Inflection > 150 bps EBITDA, Base Moat) ranked by Weekly Triple EMA Bands (13>34>89), Weekly ADX > 30, and Friday Weekly-Close execution rules.'
+                        : 'Retains macro hierarchy, ranked strictly by 4 Daily Leading Indicators: Triple EMA (9>21>55) cross & alignment, Daily ADX acceleration > 20/25 (+DI > -DI), Volume > 20-DMA / RSI 45–65 runway, and ATR/Bollinger volatility expansion.'}
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800 self-start md:self-auto shrink-0">
+                <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800 self-start lg:self-auto shrink-0 flex-wrap">
                   <button
                     onClick={() => setStrategyMode('val_mo')}
                     className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
@@ -1680,25 +1743,36 @@ export function App() {
                     <span>Val-Mo Strategy</span>
                   </button>
                   <button
-                    onClick={() => setStrategyMode('pure_momentum')}
+                    onClick={() => setStrategyMode('weekly_momentum')}
                     className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                      strategyMode === 'pure_momentum'
+                      strategyMode === 'weekly_momentum'
                         ? 'bg-gradient-to-r from-cyan-500 to-teal-400 text-slate-950 shadow-md font-black'
                         : 'text-slate-400 hover:text-white hover:bg-slate-900'
                     }`}
                   >
                     <Zap className="h-3.5 w-3.5" />
-                    <span>Pure Momentum Alone</span>
+                    <span>Weekly Momentum</span>
+                  </button>
+                  <button
+                    onClick={() => setStrategyMode('daily_momentum')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                      strategyMode === 'daily_momentum'
+                        ? 'bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950 shadow-md font-black'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                    }`}
+                  >
+                    <TrendingUp className="h-3.5 w-3.5" />
+                    <span>Daily Momentum</span>
                   </button>
                 </div>
               </div>
 
-              {/* Pure Momentum Scope & Sub-filters Bar (Top 15 Overall & Top 5 in Each Segment) */}
-              {strategyMode === 'pure_momentum' && (
+              {/* Weekly Momentum Scope & Sub-filters Bar */}
+              {strategyMode === 'weekly_momentum' && (
                 <div className="mb-4 p-3.5 rounded-xl bg-cyan-950/25 border border-cyan-500/30 text-xs flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-inner animate-fade-in">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-cyan-300 font-bold flex items-center gap-1 text-xs">
-                      <Target className="h-4 w-4" /> Momentum Filter:
+                      <Target className="h-4 w-4" /> Weekly Momentum Filter:
                     </span>
                     <button
                       onClick={() => setPureMomentumScopeFilter('top15')}
@@ -1708,9 +1782,9 @@ export function App() {
                           : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
                       }`}
                     >
-                      <span>★ Top 15 Overall Universe</span>
+                      <span>★ Top 15 Weekly Overall</span>
                       <span className="text-[10px] opacity-75 font-mono">
-                        ({universeMomentumProfiles ? Array.from(universeMomentumProfiles.values()).filter((p) => p.isTop15Overall).length : 15})
+                        ({universeMomentumProfiles ? Array.from(universeMomentumProfiles.values()).filter((p) => p.isWeeklyTop15Overall).length : 15})
                       </span>
                     </button>
                     <button
@@ -1723,7 +1797,7 @@ export function App() {
                     >
                       <span>★ Top 5 in Each Segment</span>
                       <span className="text-[10px] opacity-75 font-mono">
-                        ({universeMomentumProfiles ? Array.from(universeMomentumProfiles.values()).filter((p) => p.isTop5InSector).length : 0})
+                        ({universeMomentumProfiles ? Array.from(universeMomentumProfiles.values()).filter((p) => p.isWeeklyTop5InSector).length : 0})
                       </span>
                     </button>
                     <button
@@ -1734,21 +1808,81 @@ export function App() {
                           : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
                       }`}
                     >
-                      <span>All MTF Scrips</span>
+                      <span>All Weekly Scrips</span>
                       <span className="text-[10px] opacity-75 font-mono">({baseHierarchyPool.length})</span>
                     </button>
                   </div>
 
-                  <div className="flex items-center gap-2 text-[11px] text-slate-300 font-mono">
-                    <span className="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-semibold">
-                      4 Daily Triggers
+                  <div className="flex items-center gap-2 text-[11px] text-slate-300 font-mono flex-wrap">
+                    <span className="px-2 py-0.5 rounded bg-teal-500/15 text-teal-400 border border-teal-500/30 font-semibold">
+                      Triple EMA 13&gt;34&gt;89
                     </span>
                     <span className="text-slate-600">+</span>
-                    <span className="px-2 py-0.5 rounded bg-teal-500/15 text-teal-400 border border-teal-500/30 font-semibold">
-                      4 Weekly Macro
+                    <span className="px-2 py-0.5 rounded bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 font-semibold">
+                      Weekly ADX &gt; 30
                     </span>
                     <span className="text-slate-600">•</span>
-                    <span className="text-cyan-300 font-medium">Click any row for MTF audit</span>
+                    <span className="text-cyan-300 font-medium">Friday 15:30 IST Close</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Daily Momentum Scope & Sub-filters Bar */}
+              {strategyMode === 'daily_momentum' && (
+                <div className="mb-4 p-3.5 rounded-xl bg-amber-950/20 border border-amber-500/30 text-xs flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-inner animate-fade-in">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-amber-300 font-bold flex items-center gap-1 text-xs">
+                      <Target className="h-4 w-4" /> Daily Momentum Filter:
+                    </span>
+                    <button
+                      onClick={() => setPureMomentumScopeFilter('top15')}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                        pureMomentumScopeFilter === 'top15'
+                          ? 'bg-amber-400 text-slate-950 shadow-md font-black'
+                          : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                      }`}
+                    >
+                      <span>★ Top 15 Daily Overall</span>
+                      <span className="text-[10px] opacity-75 font-mono">
+                        ({universeMomentumProfiles ? Array.from(universeMomentumProfiles.values()).filter((p) => p.isDailyTop15Overall).length : 15})
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => setPureMomentumScopeFilter('top5_segment')}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                        pureMomentumScopeFilter === 'top5_segment'
+                          ? 'bg-orange-500 text-slate-950 shadow-md font-black'
+                          : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                      }`}
+                    >
+                      <span>★ Top 5 in Each Segment</span>
+                      <span className="text-[10px] opacity-75 font-mono">
+                        ({universeMomentumProfiles ? Array.from(universeMomentumProfiles.values()).filter((p) => p.isDailyTop5InSector).length : 0})
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => setPureMomentumScopeFilter('all')}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                        pureMomentumScopeFilter === 'all'
+                          ? 'bg-slate-700 text-white shadow-md font-black'
+                          : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                      }`}
+                    >
+                      <span>All Daily Scrips</span>
+                      <span className="text-[10px] opacity-75 font-mono">({baseHierarchyPool.length})</span>
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-2 text-[11px] text-slate-300 font-mono flex-wrap">
+                    <span className="px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30 font-semibold">
+                      Triple EMA 9&gt;21&gt;55 Cross
+                    </span>
+                    <span className="text-slate-600">+</span>
+                    <span className="px-2 py-0.5 rounded bg-orange-500/15 text-orange-300 border border-orange-500/30 font-semibold">
+                      ADX &gt; 20/25 (+DI&gt;-DI)
+                    </span>
+                    <span className="text-slate-600">•</span>
+                    <span className="text-amber-300 font-medium">Fast Tactical Entry Trigger</span>
                   </div>
                 </div>
               )}
@@ -1975,14 +2109,14 @@ export function App() {
                     </div>
                   </div>
                 </div>
-              ) : (
+              ) : strategyMode === 'weekly_momentum' ? (
                 <div className="mb-4 p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-cyan-400 font-semibold text-[11px] flex items-center gap-1">
-                      <Zap className="h-3.5 w-3.5" /> Pure Momentum Hierarchy:
+                      <Zap className="h-3.5 w-3.5" /> Weekly Momentum Hierarchy:
                     </span>
                     <span className="text-slate-300 font-mono text-[11px] bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
-                      Regime: {activeRegime.name}
+                      Mode: {activeRegime.name}
                     </span>
                     <span className="text-slate-600">→</span>
                     <span className="text-slate-300 font-mono text-[11px] bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
@@ -1990,13 +2124,37 @@ export function App() {
                     </span>
                     <span className="text-slate-600">→</span>
                     <span className="text-slate-300 font-mono text-[11px] bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
-                      Top 15 Overall &amp; Top 5 Segment
+                      Top 15 Weekly &amp; Top 5 Segment
                     </span>
                   </div>
 
                   <div className="flex items-center gap-2 text-[11px] text-cyan-300 bg-cyan-950/40 border border-cyan-500/30 px-2.5 py-1 rounded-lg">
                     <Clock className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
-                    <span><strong>Weekly Close Cadence:</strong> Capital allocated only on Friday close when Daily &amp; Weekly MTF both pass</span>
+                    <span><strong>Weekly Close Cadence:</strong> Capital allocated on Friday 15:30 IST close when Daily &amp; Weekly MTF both pass</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="mb-4 p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-amber-400 font-semibold text-[11px] flex items-center gap-1">
+                      <TrendingUp className="h-3.5 w-3.5" /> Daily Momentum Hierarchy:
+                    </span>
+                    <span className="text-slate-300 font-mono text-[11px] bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                      Mode: {activeRegime.name}
+                    </span>
+                    <span className="text-slate-600">→</span>
+                    <span className="text-slate-300 font-mono text-[11px] bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                      Sector: {candidateScope === 'all' ? 'All Macro Sectors' : activeSector.name}
+                    </span>
+                    <span className="text-slate-600">→</span>
+                    <span className="text-slate-300 font-mono text-[11px] bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                      Top 15 Daily &amp; Top 5 Segment
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2 text-[11px] text-amber-300 bg-amber-950/30 border border-amber-500/30 px-2.5 py-1 rounded-lg">
+                    <Zap className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+                    <span><strong>Fast Tactical Entry:</strong> Filtered strictly on 4 Daily Leading Indicators with real-time breakout triggers</span>
                   </div>
                 </div>
               )}
@@ -2004,8 +2162,10 @@ export function App() {
               {filteredHierarchyStocks.length === 0 ? (
                 <div className="p-8 text-center text-xs text-slate-400 border border-slate-800 rounded-xl bg-slate-950/40 space-y-3">
                   <p>
-                    {strategyMode === 'pure_momentum'
-                      ? `No scrips match the active Pure Momentum scope (${pureMomentumScopeFilter === 'top15' ? 'Top 15 Overall' : pureMomentumScopeFilter === 'top5_segment' ? 'Top 5 in Each Segment' : 'All'}).`
+                    {strategyMode === 'weekly_momentum'
+                      ? `No scrips match the active Weekly Momentum scope (${pureMomentumScopeFilter === 'top15' ? 'Top 15 Weekly Overall' : pureMomentumScopeFilter === 'top5_segment' ? 'Top 5 in Each Segment' : 'All'}).`
+                      : strategyMode === 'daily_momentum'
+                      ? `No scrips match the active Daily Momentum scope (${pureMomentumScopeFilter === 'top15' ? 'Top 15 Daily Overall' : pureMomentumScopeFilter === 'top5_segment' ? 'Top 5 in Each Segment' : 'All'}).`
                       : `No candidate scrips match the active filters (ROCE ≥ ${minRoce}%, D/E ≤ ${maxDebtToEquity}x, PEG ≤ ${maxPeg}x${valMoRange !== 'all' ? `, Val-Mo Range: ${VAL_MO_SCORE_RANGES.find((r) => r.id === valMoRange)?.badge}` : ''}).`}
                   </p>
                   <button
@@ -2022,11 +2182,11 @@ export function App() {
                       <tr className="border-b border-slate-800 text-slate-400 uppercase tracking-wider text-[10px] bg-slate-950/40">
                         <th className="py-2.5 px-3">Symbol / Name</th>
                         <th className="py-2.5 px-3">CMP (Live NSE)</th>
-                        {strategyMode === 'pure_momentum' ? (
+                        {strategyMode === 'weekly_momentum' ? (
                           <>
-                            <th className="py-2.5 px-3">Pure Momentum Rank &amp; Score</th>
-                            <th className="py-2.5 px-3">Daily Leading Indicators (4)</th>
+                            <th className="py-2.5 px-3">Weekly Rank &amp; Score</th>
                             <th className="py-2.5 px-3">Weekly Macro Trend (4)</th>
+                            <th className="py-2.5 px-3">Daily Leading Alignment (4)</th>
                             <th className="py-2.5 px-3">
                               <div className="flex items-center gap-1">
                                 <span>30D Trend</span>
@@ -2040,7 +2200,29 @@ export function App() {
                                 </button>
                               </div>
                             </th>
-                            <th className="py-2.5 px-3">MTF Alignment</th>
+                            <th className="py-2.5 px-3">Friday Close Cadence</th>
+                            <th className="py-2.5 px-3">Strategic Lot Size</th>
+                            <th className="py-2.5 px-3 text-right">Actions</th>
+                          </>
+                        ) : strategyMode === 'daily_momentum' ? (
+                          <>
+                            <th className="py-2.5 px-3">Daily Rank &amp; Score</th>
+                            <th className="py-2.5 px-3">Daily Leading Indicators (4)</th>
+                            <th className="py-2.5 px-3">Weekly Macro Support (4)</th>
+                            <th className="py-2.5 px-3">
+                              <div className="flex items-center gap-1">
+                                <span>30D Trend</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setIsSparklineGuideOpen(true)}
+                                  className="text-amber-400 hover:text-amber-200 transition-colors p-0.5 rounded cursor-pointer"
+                                  title="Click to learn how to read this sparkline chart"
+                                >
+                                  <HelpCircle className="h-3 w-3" />
+                                </button>
+                              </div>
+                            </th>
+                            <th className="py-2.5 px-3">Tactical Entry Status</th>
                             <th className="py-2.5 px-3">Strategic Lot Size</th>
                             <th className="py-2.5 px-3 text-right">Actions</th>
                           </>
@@ -2061,11 +2243,11 @@ export function App() {
                                 </button>
                               </div>
                             </th>
-                            <th className="py-2.5 px-3">Daily &amp; Weekly Momentum</th>
+                            <th className="py-2.5 px-3">Daily &amp; Weekly Momentum (MTF)</th>
                             <th className="py-2.5 px-3">Val-Mo Score (Factor Split)</th>
                             <th className="py-2.5 px-3">Status</th>
                             <th className="py-2.5 px-3">Strategic Lot Size</th>
-                            <th className="py-2.5 px-3 text-right">Action</th>
+                            <th className="py-2.5 px-3 text-right">Actions</th>
                           </>
                         )}
                       </tr>
@@ -2128,71 +2310,37 @@ export function App() {
                               <div className="text-[9px] text-emerald-400/80 font-mono">NSE Calibrated</div>
                             </td>
 
-                            {/* PURE MOMENTUM COLUMNS */}
-                            {strategyMode === 'pure_momentum' ? (
+                            {/* WEEKLY MOMENTUM COLUMNS */}
+                            {strategyMode === 'weekly_momentum' ? (
                               <>
-                                {/* Pure Momentum Rank & Score */}
+                                {/* Weekly Rank & Score */}
                                 <td className="py-3 px-3">
                                   <div className="space-y-1">
                                     <div className="flex items-center gap-1.5 flex-wrap">
                                       <span className="font-mono font-black text-sm text-cyan-300">
-                                        #{mtf?.rankOverall || 1}
+                                        #{mtf?.weeklyRankOverall || mtf?.rankOverall || 1}
                                       </span>
-                                      {mtf?.isTop15Overall && (
+                                      {mtf?.isWeeklyTop15Overall && (
                                         <span className="text-[9px] px-1.5 py-0.2 rounded font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                                          ★ Top 15 Overall
+                                          ★ Top 15 Weekly
                                         </span>
                                       )}
-                                      {mtf?.isTop5InSector && (
+                                      {mtf?.isWeeklyTop5InSector && (
                                         <span className="text-[9px] px-1.5 py-0.2 rounded font-bold bg-teal-500/20 text-teal-300 border border-teal-500/30">
                                           ★ Top 5 {getSectorShortLabel(stock.sectorId)}
                                         </span>
                                       )}
                                     </div>
                                     <div className="text-[11px] font-mono text-slate-300">
-                                      Score: <strong className="text-white">{mtf?.pureMomentumScore || 0}</strong>
+                                      Score: <strong className="text-white">{mtf?.weeklyMomentumScore || mtf?.pureMomentumScore || 0}</strong>
                                       <span className="text-[10px] text-slate-500">/100</span>
                                       <span className="text-slate-600 mx-1">·</span>
-                                      <span className="text-cyan-400 text-[10px]">{mtf?.totalIndicatorCount || 0}/8 Passed</span>
+                                      <span className="text-cyan-400 text-[10px]">{mtf?.weekly.passedCount || 0}/4 Weekly</span>
                                     </div>
                                   </div>
                                 </td>
 
-                                {/* Daily Leading Indicators */}
-                                <td className="py-3 px-3">
-                                  <div
-                                    onClick={() => setInspectedMomentumStock(stock)}
-                                    className="cursor-pointer group p-1.5 -m-1.5 rounded-lg hover:bg-slate-800/50 transition-colors"
-                                    title="Click to view full Daily Leading Indicators audit"
-                                  >
-                                    <div className="flex items-center gap-1.5">
-                                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${
-                                        (mtf?.daily.passedCount || 0) >= 3
-                                          ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
-                                          : (mtf?.daily.passedCount || 0) === 2
-                                          ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
-                                          : 'bg-rose-500/15 text-rose-300 border-rose-500/30'
-                                      }`}>
-                                        {mtf?.daily.passedCount || 0}/4 Daily • {mtf?.daily.statusLabel || 'Neutral'}
-                                      </span>
-                                    </div>
-                                    <div className="flex items-center gap-1 mt-1 text-[9px] font-mono text-slate-400">
-                                      <span className={(mtf?.daily.priceAboveFastEma && mtf?.daily.shortAboveLongEma) ? 'text-emerald-400' : 'text-slate-500'}>
-                                        {(mtf?.daily.priceAboveFastEma && mtf?.daily.shortAboveLongEma) ? '✓ EMA-Cross' : '✗ EMA-Cross'}
-                                      </span>
-                                      <span className="text-slate-600">·</span>
-                                      <span className={mtf?.daily.adxAccelerating ? 'text-emerald-400' : 'text-slate-500'}>
-                                        {mtf?.daily.adxAccelerating ? `✓ ADX ${mtf?.daily.adx}` : `✗ ADX ${mtf?.daily.adx}`}
-                                      </span>
-                                      <span className="text-slate-600">·</span>
-                                      <span className={(mtf?.daily.volumeAbove20Dma || mtf?.daily.rsiMomentumRoom) ? 'text-emerald-400' : 'text-slate-500'}>
-                                        {(mtf?.daily.volumeAbove20Dma || mtf?.daily.rsiMomentumRoom) ? '✓ Vol/RSI' : '✗ Vol/RSI'}
-                                      </span>
-                                    </div>
-                                  </div>
-                                </td>
-
-                                {/* Weekly Macro Trend */}
+                                {/* Weekly Macro Trend (4) */}
                                 <td className="py-3 px-3">
                                   <div
                                     onClick={() => setInspectedMomentumStock(stock)}
@@ -2222,6 +2370,36 @@ export function App() {
                                   </div>
                                 </td>
 
+                                {/* Daily Leading Alignment (4) */}
+                                <td className="py-3 px-3">
+                                  <div
+                                    onClick={() => setInspectedMomentumStock(stock)}
+                                    className="cursor-pointer group p-1.5 -m-1.5 rounded-lg hover:bg-slate-800/50 transition-colors"
+                                    title="Click to view full Daily Leading Indicators audit"
+                                  >
+                                    <div className="flex items-center gap-1.5">
+                                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${
+                                        (mtf?.daily.passedCount || 0) >= 3
+                                          ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                                          : (mtf?.daily.passedCount || 0) === 2
+                                          ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                                          : 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+                                      }`}>
+                                        {mtf?.daily.passedCount || 0}/4 Daily • {mtf?.daily.statusLabel || 'Neutral'}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-1 mt-1 text-[9px] font-mono text-slate-400">
+                                      <span className={(mtf?.daily.priceAboveFastEma && mtf?.daily.shortAboveLongEma) ? 'text-emerald-400' : 'text-slate-500'}>
+                                        {(mtf?.daily.priceAboveFastEma && mtf?.daily.shortAboveLongEma) ? '✓ EMA-Cross' : '✗ EMA-Cross'}
+                                      </span>
+                                      <span className="text-slate-600">·</span>
+                                      <span className={mtf?.daily.adxAccelerating ? 'text-emerald-400' : 'text-slate-500'}>
+                                        {mtf?.daily.adxAccelerating ? `✓ ADX ${mtf?.daily.adx}` : `✗ ADX ${mtf?.daily.adx}`}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </td>
+
                                 {/* 30D Trend Sparkline */}
                                 <td className="py-3 px-3">
                                   <SparklineChart
@@ -2234,7 +2412,7 @@ export function App() {
                                   />
                                 </td>
 
-                                {/* MTF Alignment & Weekly Close Cadence */}
+                                {/* MTF Alignment & Friday Close Cadence */}
                                 <td className="py-3 px-3">
                                   <span className={`inline-flex items-center gap-1 text-[11px] font-bold ${
                                     mtf?.weekly.mtfSynchronized ? 'text-emerald-400' : 'text-amber-400'
@@ -2268,19 +2446,182 @@ export function App() {
                                   )}
                                 </td>
 
-                                {/* Actions */}
+                                {/* Actions - 3 Standard Buttons */}
                                 <td className="py-3 px-3 text-right">
                                   <div className="flex items-center justify-end gap-1.5">
                                     <button
-                                      onClick={() => setInspectedMomentumStock(stock)}
-                                      className="px-2.5 py-1 bg-cyan-950/60 hover:bg-cyan-900/80 text-cyan-300 border border-cyan-700/50 rounded text-[11px] transition-colors cursor-pointer flex items-center gap-1 font-semibold"
-                                      title="Audit all 8 Daily & Weekly indicators"
+                                      onClick={() => setInspectedScrip(stock)}
+                                      className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[11px] transition-colors cursor-pointer flex items-center gap-1 font-medium"
+                                      title="Open Technical Chart & DMA Workbench"
                                     >
-                                      <Zap className="h-3 w-3" /> MTF Details
+                                      <BarChart2 className="h-3 w-3 text-cyan-400" /> Chart
+                                    </button>
+                                    <button
+                                      onClick={() => setInspectedMomentumStock(stock)}
+                                      className="px-2 py-1 bg-cyan-950/70 hover:bg-cyan-900/80 text-cyan-300 border border-cyan-700/50 rounded text-[11px] transition-colors cursor-pointer flex items-center gap-1 font-semibold"
+                                      title="Audit all 8 Daily & Weekly MTF indicators"
+                                    >
+                                      <Zap className="h-3 w-3" /> MTF
                                     </button>
                                     <button
                                       onClick={() => executePaperTrade(stock)}
                                       className="px-2.5 py-1 bg-gradient-to-r from-cyan-500 to-teal-400 hover:from-cyan-400 hover:to-teal-300 text-slate-950 font-bold rounded text-[11px] flex items-center gap-1 transition-colors shadow-sm cursor-pointer"
+                                      title="Allocate theoretical lot in paper trading"
+                                    >
+                                      <Plus className="h-3 w-3" /> Paper Buy
+                                    </button>
+                                  </div>
+                                </td>
+                              </>
+                            ) : strategyMode === 'daily_momentum' ? (
+                              /* DAILY MOMENTUM COLUMNS */
+                              <>
+                                {/* Daily Rank & Score */}
+                                <td className="py-3 px-3">
+                                  <div className="space-y-1">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className="font-mono font-black text-sm text-amber-300">
+                                        #{mtf?.dailyRankOverall || 1}
+                                      </span>
+                                      {mtf?.isDailyTop15Overall && (
+                                        <span className="text-[9px] px-1.5 py-0.2 rounded font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                          ★ Top 15 Daily
+                                        </span>
+                                      )}
+                                      {mtf?.isDailyTop5InSector && (
+                                        <span className="text-[9px] px-1.5 py-0.2 rounded font-bold bg-orange-500/20 text-orange-300 border border-orange-500/30">
+                                          ★ Top 5 {getSectorShortLabel(stock.sectorId)}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="text-[11px] font-mono text-slate-300">
+                                      Score: <strong className="text-white">{mtf?.dailyMomentumScore || 0}</strong>
+                                      <span className="text-[10px] text-slate-500">/100</span>
+                                      <span className="text-slate-600 mx-1">·</span>
+                                      <span className="text-amber-400 text-[10px]">{mtf?.daily.passedCount || 0}/4 Daily</span>
+                                    </div>
+                                  </div>
+                                </td>
+
+                                {/* Daily Leading Indicators (4) */}
+                                <td className="py-3 px-3">
+                                  <div
+                                    onClick={() => setInspectedMomentumStock(stock)}
+                                    className="cursor-pointer group p-1.5 -m-1.5 rounded-lg hover:bg-slate-800/50 transition-colors"
+                                    title="Click to view full Daily Leading Indicators audit"
+                                  >
+                                    <div className="flex items-center gap-1.5">
+                                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${
+                                        (mtf?.daily.passedCount || 0) >= 3
+                                          ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                                          : (mtf?.daily.passedCount || 0) === 2
+                                          ? 'bg-yellow-500/15 text-yellow-300 border-yellow-500/30'
+                                          : 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+                                      }`}>
+                                        {mtf?.daily.passedCount || 0}/4 Daily • {mtf?.daily.statusLabel || 'Neutral'}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-1 mt-1 text-[9px] font-mono text-slate-400">
+                                      <span className={(mtf?.daily.priceAboveFastEma && mtf?.daily.shortAboveLongEma) ? 'text-amber-400' : 'text-slate-500'}>
+                                        {(mtf?.daily.priceAboveFastEma && mtf?.daily.shortAboveLongEma) ? '✓ EMA-Cross' : '✗ EMA-Cross'}
+                                      </span>
+                                      <span className="text-slate-600">·</span>
+                                      <span className={mtf?.daily.adxAccelerating ? 'text-amber-400' : 'text-slate-500'}>
+                                        {mtf?.daily.adxAccelerating ? `✓ ADX ${mtf?.daily.adx}` : `✗ ADX ${mtf?.daily.adx}`}
+                                      </span>
+                                      <span className="text-slate-600">·</span>
+                                      <span className={(mtf?.daily.volumeAbove20Dma || mtf?.daily.rsiMomentumRoom) ? 'text-amber-400' : 'text-slate-500'}>
+                                        {(mtf?.daily.volumeAbove20Dma || mtf?.daily.rsiMomentumRoom) ? '✓ Vol/RSI' : '✗ Vol/RSI'}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </td>
+
+                                {/* Weekly Macro Support (4) */}
+                                <td className="py-3 px-3">
+                                  <div
+                                    onClick={() => setInspectedMomentumStock(stock)}
+                                    className="cursor-pointer group p-1.5 -m-1.5 rounded-lg hover:bg-slate-800/50 transition-colors"
+                                    title="Click to view Weekly Macro Support audit"
+                                  >
+                                    <div className="flex items-center gap-1.5">
+                                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${
+                                        (mtf?.weekly.passedCount || 0) >= 3
+                                          ? 'bg-teal-500/15 text-teal-300 border-teal-500/30'
+                                          : 'bg-slate-800 text-slate-400 border-slate-700'
+                                      }`}>
+                                        {mtf?.weekly.passedCount || 0}/4 Weekly
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-1 mt-1 text-[9px] font-mono text-slate-400">
+                                      <span className={mtf?.weekly.supportedByEmaBands ? 'text-teal-400' : 'text-slate-500'}>
+                                        {mtf?.weekly.supportedByEmaBands ? '✓ EMA-Bands' : '✗ EMA-Bands'}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </td>
+
+                                {/* 30D Trend Sparkline */}
+                                <td className="py-3 px-3">
+                                  <SparklineChart
+                                    data={stock.sparkline30D}
+                                    dma50={stock.dma50}
+                                    currentPrice={stock.price}
+                                    width={84}
+                                    height={26}
+                                    onGuideClick={() => setIsSparklineGuideOpen(true)}
+                                  />
+                                </td>
+
+                                {/* Tactical Entry Status */}
+                                <td className="py-3 px-3">
+                                  <div className="space-y-1">
+                                    <span className={`inline-flex items-center gap-1 text-[11px] font-bold ${
+                                      (mtf?.daily.passedCount || 0) >= 3 ? 'text-amber-400' : 'text-slate-400'
+                                    }`}>
+                                      {(mtf?.daily.passedCount || 0) >= 4 ? '🚀 Immediate Breakout' : (mtf?.daily.passedCount || 0) >= 3 ? '⚡ Tactical Trigger' : 'Consolidating'}
+                                    </span>
+                                    <div className="text-[9px] font-mono text-slate-400">
+                                      ATR Exp: {mtf?.daily.atrExpansion ? 'Active' : 'Neutral'} · RSI {mtf?.daily.dailyRsi}
+                                    </div>
+                                  </div>
+                                </td>
+
+                                {/* Strategic Lot Sizing */}
+                                <td className="py-3 px-3">
+                                  {stock.calculatedLotShares > 0 ? (
+                                    <div>
+                                      <div className="font-bold text-white">{stock.calculatedLotShares} Shares (₹{(stock.calculatedLotShares * stock.price).toLocaleString('en-IN')})</div>
+                                      <div className="text-[10px] text-slate-400">
+                                        Pyramid: ₹{stock.pyramidUpTriggerPrice} | Stop: ₹{stock.pyramidDownStopLossPrice}
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <span className="text-[10px] text-slate-500 italic">Disqualified (no lot)</span>
+                                  )}
+                                </td>
+
+                                {/* Actions - 3 Standard Buttons */}
+                                <td className="py-3 px-3 text-right">
+                                  <div className="flex items-center justify-end gap-1.5">
+                                    <button
+                                      onClick={() => setInspectedScrip(stock)}
+                                      className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[11px] transition-colors cursor-pointer flex items-center gap-1 font-medium"
+                                      title="Open Technical Chart & DMA Workbench"
+                                    >
+                                      <BarChart2 className="h-3 w-3 text-amber-400" /> Chart
+                                    </button>
+                                    <button
+                                      onClick={() => setInspectedMomentumStock(stock)}
+                                      className="px-2 py-1 bg-amber-950/70 hover:bg-amber-900/80 text-amber-300 border border-amber-600/50 rounded text-[11px] transition-colors cursor-pointer flex items-center gap-1 font-semibold"
+                                      title="Audit all 8 Daily & Weekly MTF indicators"
+                                    >
+                                      <Zap className="h-3 w-3" /> MTF
+                                    </button>
+                                    <button
+                                      onClick={() => executePaperTrade(stock)}
+                                      className="px-2.5 py-1 bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-300 hover:to-orange-400 text-slate-950 font-bold rounded text-[11px] flex items-center gap-1 transition-colors shadow-sm cursor-pointer"
+                                      title="Allocate theoretical lot in paper trading"
                                     >
                                       <Plus className="h-3 w-3" /> Paper Buy
                                     </button>
@@ -2314,31 +2655,42 @@ export function App() {
                                     onGuideClick={() => setIsSparklineGuideOpen(true)}
                                   />
                                 </td>
+                                {/* Clickable MTF Button & Breakdown Cell for Val-Mo Scrips */}
                                 <td className="py-3 px-3">
-                                  <div
+                                  <button
+                                    type="button"
                                     onClick={() => setInspectedMomentumStock(stock)}
-                                    className="cursor-pointer group p-1 -m-1 rounded hover:bg-slate-800/40 transition-colors"
-                                    title="Click to audit Daily & Weekly Leading Indicators"
+                                    className="w-full text-left p-1.5 rounded-lg bg-slate-950/80 hover:bg-slate-900 border border-slate-800 hover:border-cyan-500/40 transition-all cursor-pointer group shadow-sm"
+                                    title="Click to audit full Daily & Weekly MTF Indicators"
                                   >
-                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                      <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.2 rounded border ${
+                                    <div className="flex items-center justify-between gap-1">
+                                      <span className="text-[10px] font-bold text-cyan-300 flex items-center gap-1">
+                                        <Zap className="h-3 w-3 text-cyan-400" /> MTF Status
+                                      </span>
+                                      <span className="text-[9px] text-cyan-400/80 group-hover:text-cyan-300 font-semibold transition-colors flex items-center">
+                                        Audit →
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-1 mt-1 flex-wrap">
+                                      <span className={`inline-flex items-center gap-0.5 text-[9px] font-bold px-1 py-0.2 rounded border ${
                                         stock.above50Dma ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/15 text-rose-400 border-rose-500/30'
                                       }`}>
                                         {stock.above50Dma ? '>50D' : '<50D'}
                                       </span>
-                                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 font-mono">
+                                      <span className="text-[9px] px-1 py-0.2 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 font-mono font-bold">
                                         D:{mtf?.daily.passedCount || 0}/4
                                       </span>
-                                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-teal-500/10 text-teal-300 border border-teal-500/20 font-mono">
+                                      <span className="text-[9px] px-1 py-0.2 rounded bg-teal-500/10 text-teal-300 border border-teal-500/20 font-mono font-bold">
                                         W:{mtf?.weekly.passedCount || 0}/4
                                       </span>
                                     </div>
-                                    <div className="text-[9px] text-slate-400 mt-0.5 flex items-center gap-1">
+                                    <div className="text-[9px] text-slate-400 mt-1 flex items-center justify-between">
                                       <span>Vol: {stock.deliveryVolumeRatio}x</span>
-                                      <span className="text-slate-600">·</span>
-                                      <span className="text-cyan-400 group-hover:underline">MTF details →</span>
+                                      <span className={`font-mono text-[9px] font-semibold ${mtf?.isWeeklyCloseQualified ? 'text-emerald-400' : 'text-slate-500'}`}>
+                                        {mtf?.isWeeklyCloseQualified ? '✓ Fri Ready' : 'Pending Fri'}
+                                      </span>
                                     </div>
-                                  </div>
+                                  </button>
                                 </td>
                                 <td className="py-3 px-3 min-w-[170px]">
                                   <div className="space-y-1">
@@ -2398,29 +2750,34 @@ export function App() {
                                     <span className="text-[10px] text-slate-500 italic">Disqualified (no lot)</span>
                                   )}
                                 </td>
+                                {/* Val-Mo Actions: ALL 3 BUTTONS */}
                                 <td className="py-3 px-3 text-right">
                                   <div className="flex items-center justify-end gap-1.5">
                                     <button
                                       onClick={() => setInspectedScrip(stock)}
-                                      className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[11px] transition-colors cursor-pointer"
+                                      className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[11px] transition-colors cursor-pointer flex items-center gap-1 font-medium"
+                                      title="Open Technical Chart & DMA Workbench"
                                     >
-                                      Metrics
+                                      <BarChart2 className="h-3 w-3 text-emerald-400" /> Chart
                                     </button>
                                     <button
                                       onClick={() => setInspectedMomentumStock(stock)}
-                                      className="px-2 py-1 bg-cyan-950/60 hover:bg-cyan-900/80 text-cyan-300 border border-cyan-800/40 rounded text-[11px] transition-colors cursor-pointer"
+                                      className="px-2 py-1 bg-cyan-950/70 hover:bg-cyan-900 text-cyan-300 border border-cyan-800/40 rounded text-[11px] transition-colors cursor-pointer flex items-center gap-1 font-semibold"
                                       title="Audit Daily & Weekly MTF Indicators"
                                     >
-                                      MTF
+                                      <Zap className="h-3 w-3" /> MTF
                                     </button>
-                                    {stock.qualificationTier === 'Tier 5 Qualified' && (
-                                      <button
-                                        onClick={() => executePaperTrade(stock)}
-                                        className="px-2.5 py-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded text-[11px] flex items-center gap-1 transition-colors shadow-sm cursor-pointer"
-                                      >
-                                        <Plus className="h-3 w-3" /> Paper Buy
-                                      </button>
-                                    )}
+                                    <button
+                                      onClick={() => executePaperTrade(stock)}
+                                      className={`px-2.5 py-1 font-bold rounded text-[11px] flex items-center gap-1 transition-colors shadow-sm cursor-pointer ${
+                                        stock.qualificationTier === 'Tier 5 Qualified'
+                                          ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950'
+                                          : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
+                                      }`}
+                                      title={stock.qualificationTier === 'Tier 5 Qualified' ? 'Allocate theoretical lot' : 'Add to Paper Portfolio'}
+                                    >
+                                      <Plus className="h-3 w-3" /> Paper Buy
+                                    </button>
                                   </div>
                                 </td>
                               </>
@@ -2445,20 +2802,32 @@ export function App() {
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${
-                      strategyMode === 'pure_momentum'
+                      strategyMode === 'val_mo'
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                        : strategyMode === 'weekly_momentum'
                         ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30'
-                        : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                        : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
                     }`}>
-                      {strategyMode === 'pure_momentum' ? 'Pure Momentum Model Picks' : 'Quantitative Val-Mo Output'}
+                      {strategyMode === 'val_mo'
+                        ? 'Quantitative Val-Mo Output'
+                        : strategyMode === 'weekly_momentum'
+                        ? 'Weekly Momentum Model Picks'
+                        : 'Daily Momentum Model Picks'}
                     </span>
                     <span className="text-xs text-slate-400 font-medium">
-                      {strategyMode === 'pure_momentum' ? 'Daily & Weekly MTF Indicators Synchronized' : '5-Tier Screening Pipeline Filtered'}
+                      {strategyMode === 'val_mo'
+                        ? '5-Tier Screening Pipeline Filtered'
+                        : strategyMode === 'weekly_momentum'
+                        ? 'Weekly Macro Trend & MTF Synchronized'
+                        : 'Fast Tactical Daily Indicators Active'}
                     </span>
                   </div>
                   <h2 className="text-xl font-black text-white mt-1">
-                    {strategyMode === 'pure_momentum'
-                      ? 'Pure Momentum Candidates & Lot Sizing'
-                      : 'Strategic Model Candidates & Calculated Lot Sizing'}
+                    {strategyMode === 'val_mo'
+                      ? 'Strategic Model Candidates & Calculated Lot Sizing'
+                      : strategyMode === 'weekly_momentum'
+                      ? 'Weekly Momentum Candidates & Lot Sizing'
+                      : 'Daily Momentum Candidates & Fast Lot Sizing'}
                   </h2>
                   <p className="text-xs text-slate-400 mt-1">
                     Systematic lot allocation for ₹{capitalConfig.baseCapital.toLocaleString('en-IN')} base capital with predefined pyramiding triggers and stop-losses.
@@ -2467,7 +2836,7 @@ export function App() {
 
                 <div className="flex items-center gap-4">
                   {/* Strategy Mode Switcher in Candidate View */}
-                  <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
+                  <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 flex-wrap">
                     <button
                       onClick={() => setStrategyMode('val_mo')}
                       className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
@@ -2480,15 +2849,26 @@ export function App() {
                       <span>Val-Mo</span>
                     </button>
                     <button
-                      onClick={() => setStrategyMode('pure_momentum')}
+                      onClick={() => setStrategyMode('weekly_momentum')}
                       className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                        strategyMode === 'pure_momentum'
+                        strategyMode === 'weekly_momentum'
                           ? 'bg-gradient-to-r from-cyan-500 to-teal-400 text-slate-950 shadow-sm font-black'
                           : 'text-slate-400 hover:text-white'
                       }`}
                     >
                       <Zap className="h-3.5 w-3.5" />
-                      <span>Pure Momentum</span>
+                      <span>Weekly Momentum</span>
+                    </button>
+                    <button
+                      onClick={() => setStrategyMode('daily_momentum')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                        strategyMode === 'daily_momentum'
+                          ? 'bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950 shadow-sm font-black'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <TrendingUp className="h-3.5 w-3.5" />
+                      <span>Daily Momentum</span>
                     </button>
                   </div>
 
@@ -2688,8 +3068,18 @@ export function App() {
                     <div>
                       <div className="flex items-center gap-2">
                         <h3 className="text-base font-black text-white">{stock.symbol}</h3>
-                        <span className="text-[10px] font-bold bg-emerald-500/15 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/30">
-                          Val-Mo: {stock.valMoScore}/100 (Rank #{selectionRank})
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+                          strategyMode === 'val_mo'
+                            ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                            : strategyMode === 'weekly_momentum'
+                            ? 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30'
+                            : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                        }`}>
+                          {strategyMode === 'val_mo'
+                            ? `Val-Mo: ${stock.valMoScore}/100 (Rank #${selectionRank})`
+                            : strategyMode === 'weekly_momentum'
+                            ? `Weekly Mo: ${universeMomentumProfiles?.get(stock.symbol)?.weeklyMomentumScore || universeMomentumProfiles?.get(stock.symbol)?.pureMomentumScore || 0}/100 (Rank #${selectionRank})`
+                            : `Daily Mo: ${universeMomentumProfiles?.get(stock.symbol)?.dailyMomentumScore || 0}/100 (Rank #${selectionRank})`}
                         </span>
                         {status === 'selected' ? (
                           <span className="text-[10px] font-black bg-emerald-500 text-slate-950 px-2 py-0.5 rounded">
@@ -2815,32 +3205,34 @@ export function App() {
                     </div>
                   </div>
 
-                  {/* Action Buttons */}
-                  <div className="flex items-center justify-between gap-2.5">
+                  {/* Action Buttons: 3 Standard Cockpit Buttons */}
+                  <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-850">
                     <button
                       onClick={() => setInspectedScrip(stock)}
-                      className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-medium transition-colors cursor-pointer"
+                      className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-medium transition-colors cursor-pointer flex items-center gap-1.5"
+                      title="Open Technical Chart & DMA Workbench"
                     >
-                      Deep Metrics
+                      <BarChart2 className="h-3.5 w-3.5 text-cyan-400" />
+                      <span>Chart</span>
                     </button>
                     <button
                       onClick={() => setInspectedMomentumStock(stock)}
-                      className="px-3 py-2 bg-cyan-950/70 hover:bg-cyan-900 border border-cyan-700/50 text-cyan-300 rounded-xl text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1"
+                      className="px-2.5 py-1.5 bg-cyan-950/70 hover:bg-cyan-900 border border-cyan-700/50 text-cyan-300 rounded-xl text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5"
                       title="Audit 4 Daily & 4 Weekly Leading Indicators"
                     >
-                      <Zap className="h-3.5 w-3.5" />
-                      <span>MTF Details</span>
+                      <Zap className="h-3.5 w-3.5 text-amber-400" />
+                      <span>MTF</span>
                     </button>
                     <button
                       onClick={() => executePaperTrade(stock, dynamicLotShares)}
-                      className={`flex-1 py-2 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors shadow-md cursor-pointer ${
+                      className={`flex-1 py-1.5 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors shadow-md cursor-pointer ${
                         status === 'selected'
                           ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950'
                           : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
                       }`}
                     >
                       <Plus className="h-4 w-4" />
-                      <span>{status === 'selected' ? 'Execute Paper Trade' : 'Add to Portfolio'}</span>
+                      <span>Paper Buy</span>
                     </button>
                   </div>
                 </div>
@@ -3205,6 +3597,20 @@ export function App() {
                             <td className="py-3 px-3 text-right">
                               <div className="flex items-center justify-end gap-1.5">
                                 <button
+                                  onClick={() => scrip && setInspectedScrip(scrip)}
+                                  className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[11px] transition-colors cursor-pointer flex items-center gap-1 font-medium"
+                                  title="Open Technical Chart & DMA Workbench"
+                                >
+                                  <BarChart2 className="h-3 w-3 text-cyan-400" /> Chart
+                                </button>
+                                <button
+                                  onClick={() => scrip && setInspectedMomentumStock(scrip)}
+                                  className="px-2 py-1 bg-cyan-950/70 hover:bg-cyan-900 text-cyan-300 border border-cyan-800/40 rounded text-[11px] transition-colors cursor-pointer flex items-center gap-1 font-semibold"
+                                  title="Audit Daily & Weekly MTF Indicators"
+                                >
+                                  <Zap className="h-3 w-3 text-amber-400" /> MTF
+                                </button>
+                                <button
                                   onClick={() => executePyramidTranche(pos.id)}
                                   className="px-2 py-1 bg-teal-500/15 hover:bg-teal-500/25 text-teal-300 border border-teal-500/30 font-semibold rounded text-[11px] transition-colors cursor-pointer"
                                   title="Add +50% pyramid tranche from staging buffer"
@@ -3521,7 +3927,7 @@ export function App() {
       <footer className="border-t border-slate-900 bg-slate-950/90 py-3.5 text-center text-xs text-slate-500">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
           <span>Branch: <code>geminigoofups</code> • Quantitative Strategic Tool (Non-Advisory)</span>
-          <span className="text-[11px] text-slate-600">Nifty 500 Regime &amp; Val-Mo Strategy Framework</span>
+          <span className="text-[11px] text-slate-600">Nifty 500 Market Mode &amp; Val-Mo Strategy Framework</span>
         </div>
       </footer>
 

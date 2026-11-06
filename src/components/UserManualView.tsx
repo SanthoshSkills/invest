@@ -100,7 +100,7 @@ export function UserManualView({
                 Strategy Guide, Terminal Manual &amp; Quantitative Specs
               </h2>
               <p className="text-xs text-slate-400 mt-1 max-w-2xl">
-                Master the complete Nifty 500 Value-Momentum (Val-Mo) methodology, capital architecture controls, sparkline diagnostics, and 8-regime allocation models.
+                Master the complete Nifty 500 Value-Momentum (Val-Mo) methodology, capital architecture controls, sparkline diagnostics, and 8-market mode allocation models.
               </p>
             </div>
           </div>
@@ -174,7 +174,7 @@ export function UserManualView({
                 : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
             }`}
           >
-            <BarChart2 className="h-3.5 w-3.5" /> 5. 8-Regime Matrix
+            <BarChart2 className="h-3.5 w-3.5" /> 5. 8-Mode Matrix
           </button>
           <button
             onClick={() => setActiveSection('specs')}
@@ -510,7 +510,7 @@ export function UserManualView({
           <div className="bg-slate-900/70 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
             <h3 className="text-base font-bold text-white flex items-center gap-2 border-b border-slate-800 pb-3">
               <BarChart2 className="h-4 w-4 text-purple-400" />
-              <span>The 8 Market Regimes Classification Model</span>
+              <span>The 8 Market Modes Classification Model</span>
             </h3>
             <p className="text-xs text-slate-400">
               Quantitative asset allocation adjusts dynamically based on market breadth, India VIX, and index distance to the 200-DMA:
@@ -519,7 +519,7 @@ export function UserManualView({
             <div className="space-y-2.5 text-xs">
               <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30">
                 <div className="flex items-center justify-between font-bold text-amber-300 mb-1">
-                  <span>1. Sideways / Transition (Current Active Regime)</span>
+                  <span>1. Sideways / Transition (Current Active Mode)</span>
                   <span className="text-[10px] font-mono bg-amber-500/20 px-2 py-0.5 rounded">60% Equity / 40% Liquid</span>
                 </div>
                 <p className="text-slate-300 text-[11px]">
@@ -682,7 +682,7 @@ export function UserManualView({
                 </h3>
                 <p className="text-xs text-slate-400 mt-1 max-w-2xl">
                   {simulateStress
-                    ? 'CRITICAL ALERT: Intraday price drop breached trailing stop threshold on TRIL (-6.7%). India VIX (26.4) exceeds transition regime ceiling. Corrective trim and cash re-allocation required.'
+                    ? 'CRITICAL ALERT: Intraday price drop breached trailing stop threshold on TRIL (-6.7%). India VIX (26.4) exceeds transition mode ceiling. Corrective trim and cash re-allocation required.'
                     : 'All 6 mathematical invariants from RESEARCH.md are in active alignment. No trailing stop-loss violations, valuation ceilings within +1.5σ thresholds, and cash reserves exceed the 10% floor.'}
                 </p>
               </div>
@@ -792,7 +792,7 @@ export function UserManualView({
                   <span className="text-[11px] font-mono text-purple-400">Every Friday 16:00 IST</span>
                 </div>
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  Evaluates macro regime transitions, Relative Rotation Graph (RRG) sector quadrant migration, and market breadth indicators.
+                  Evaluates macro market mode transitions, Relative Rotation Graph (RRG) sector quadrant migration, and market breadth indicators.
                 </p>
                 <div className="space-y-1.5 text-xs">
                   <div className="flex items-center justify-between text-slate-300">
@@ -1032,7 +1032,7 @@ export function UserManualView({
             </h4>
             <div className="text-xs text-slate-300 space-y-3 leading-relaxed">
               <p>
-                <strong>RESEARCH.md is the single immutable quantitative constitution</strong> of this investment framework. All terminal logic, position calculations, and regime transitions are hardcoded derivatives of its mathematical specifications:
+                <strong>RESEARCH.md is the single immutable quantitative constitution</strong> of this investment framework. All terminal logic, position calculations, and market mode transitions are hardcoded derivatives of its mathematical specifications:
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
                 <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800">
@@ -1042,9 +1042,9 @@ export function UserManualView({
                   </p>
                 </div>
                 <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800">
-                  <div className="font-bold text-white text-xs mb-1">2. Regime Allocations</div>
+                  <div className="font-bold text-white text-xs mb-1">2. Market Mode Allocations</div>
                   <p className="text-[11px] text-slate-400">
-                    The 8-regime equity/cash bands (e.g. 60% Equity / 40% Reserve for Sideways) are codified in <code className="text-purple-300">REGIMES_DATA</code> in <code className="text-purple-300">nifty500Data.ts</code>.
+                    The 8-market mode equity/cash bands (e.g. 60% Equity / 40% Reserve for Sideways) are codified in <code className="text-purple-300">REGIMES_DATA</code> in <code className="text-purple-300">nifty500Data.ts</code>.
                   </p>
                 </div>
                 <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800">

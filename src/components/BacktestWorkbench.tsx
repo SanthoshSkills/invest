@@ -547,7 +547,7 @@ export function BacktestWorkbench({ scenarios, stockScrips = [] }: BacktestWorkb
             <div className="flex items-center gap-2">
               <span className="text-sm font-black text-white">{activeScenario.period}</span>
               <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-purple-500/15 text-purple-300 border border-purple-500/30">
-                {activeScenario.regime}
+                Mode: {activeScenario.regime}
               </span>
               {isMomentumIsolated && (
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-mono">
@@ -769,7 +769,7 @@ export function BacktestWorkbench({ scenarios, stockScrips = [] }: BacktestWorkb
                   : 'Normalized Equity Growth Curve (Base = 100)'}
               </span>
               <span className="text-[10px] text-slate-400">
-                Visual walk-forward equity compounding across key regime milestones
+                Visual walk-forward equity compounding across key market mode milestones
               </span>
             </div>
 
